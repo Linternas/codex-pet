@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { petIdSchema } from "./petAssets.js";
+import { petIdSchema } from "./petSchema.js";
 
 export const petPreferencesSchema = z.object({
   appliedPetId: petIdSchema.nullable(),

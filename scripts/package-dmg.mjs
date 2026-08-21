@@ -30,12 +30,20 @@ const iconFileName = "Codex-Pet.icns";
 const iconPath = join(projectRoot, "build", iconFileName);
 const runtimeIconFileName = "Codex-Pet.png";
 const runtimeIconPath = join(projectRoot, "build", runtimeIconFileName);
+const codesignIdentity = process.env.CODEX_PET_CODESIGN_IDENTITY?.trim() || "-";
+const shouldUseDeveloperId = codesignIdentity !== "-";
+const shouldNotarize = process.env.CODEX_PET_NOTARIZE === "1";
 
 function run(command, args) {
   const result = spawnSync(command, args, { stdio: "inherit" });
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+}
+
+function readEnv(name) {
+  const value = process.env[name]?.trim();
+  return value === undefined || value.length === 0 ? null : value;
 }
 
 function copyResource(name) {
@@ -73,11 +81,69 @@ function resetDirectory(path) {
 }
 
 function signAppBundle(path) {
-  run("codesign", ["--force", "--deep", "--sign", "-", path]);
+  const args = shouldUseDeveloperId
+    ? ["--force", "--deep", "--options", "runtime", "--timestamp", "--sign", codesignIdentity, path]
+    : ["--force", "--deep", "--sign", codesignIdentity, path];
+  run("codesign", args);
 }
 
 function verifyAppBundle(path) {
   run("codesign", ["--verify", "--deep", "--strict", "--verbose=4", path]);
+}
+
+function signDmg(path) {
+  if (!shouldUseDeveloperId) {
+    return;
+  }
+
+  run("codesign", ["--force", "--timestamp", "--sign", codesignIdentity, path]);
+}
+
+function verifyDmg(path) {
+  if (!shouldUseDeveloperId) {
+    return;
+  }
+
+  run("codesign", ["--verify", "--strict", "--verbose=4", path]);
+}
+
+function notaryCredentialArgs() {
+  const keyPath = readEnv("CODEX_PET_NOTARY_KEY_PATH");
+  const keyId = readEnv("CODEX_PET_NOTARY_KEY_ID");
+  const issuer = readEnv("CODEX_PET_NOTARY_ISSUER_ID");
+  if (keyPath !== null && keyId !== null && issuer !== null) {
+    return ["--key", keyPath, "--key-id", keyId, "--issuer", issuer];
+  }
+
+  const appleId = readEnv("CODEX_PET_NOTARY_APPLE_ID");
+  const password = readEnv("CODEX_PET_NOTARY_PASSWORD");
+  const teamId = readEnv("CODEX_PET_NOTARY_TEAM_ID");
+  if (appleId !== null && password !== null && teamId !== null) {
+    return ["--apple-id", appleId, "--password", password, "--team-id", teamId];
+  }
+
+  throw new Error("Notarization requires App Store Connect API key or Apple ID credentials.");
+}
+
+function notarizeDmg(path) {
+  if (!shouldNotarize) {
+    return;
+  }
+  if (!shouldUseDeveloperId) {
+    throw new Error("Notarization requires CODEX_PET_CODESIGN_IDENTITY.");
+  }
+
+  run("xcrun", ["notarytool", "submit", path, "--wait", ...notaryCredentialArgs()]);
+  run("xcrun", ["stapler", "staple", path]);
+  run("spctl", [
+    "--assess",
+    "--type",
+    "open",
+    "--context",
+    "context:primary-signature",
+    "-v",
+    path,
+  ]);
 }
 
 resetDirectory(releaseDir);
@@ -148,6 +214,9 @@ run("hdiutil", [
   "UDZO",
   dmgPath,
 ]);
+signDmg(dmgPath);
+verifyDmg(dmgPath);
+notarizeDmg(dmgPath);
 rmSync(dmgRootPath, { force: true, recursive: true });
 rmSync(appBundlePath, { force: true, recursive: true });
 

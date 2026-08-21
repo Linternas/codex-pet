@@ -19,4 +19,15 @@ describe("manager preview sizing", () => {
     expect(styles).toContain("  padding: 0 12px;\n");
     expect(styles).toContain("  font-size: 12px;\n");
   });
+
+  it("Given interactive manager controls When hovered Then they use a pointer cursor", async () => {
+    const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+
+    expect(styles).toContain("button:not(:disabled),\n");
+    expect(styles).toContain("a[href],\n");
+    expect(styles).toContain('[role="button"],\n');
+    expect(styles).toContain('input[type="range"] {\n');
+    expect(styles).toContain("  cursor: pointer;\n");
+    expect(styles).toContain("button:disabled {\n  cursor: not-allowed;");
+  });
 });

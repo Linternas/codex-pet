@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  type PetAssetError,
   copyCodexPetToProject,
   deleteProjectPet,
   listProjectPets,
@@ -54,11 +55,57 @@ describe("pet asset storage", () => {
         spritesheetPath: "spritesheet.webp",
       }),
     );
+    await writeFile(join(projectPetDir, "spritesheet.webp"), "sprite-bytes");
 
     const pet = await readProjectPet("guga", { homeDir, projectRoot });
 
     expect(pet.manifest.description).toBe("A display pet");
     expect(pet.spriteUrl).toBe("pets/guga/spritesheet.webp");
+  });
+
+  it("Given a project asset is missing pet.json When reading Then the missing manifest path is reported", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "codex-pet-assets-"));
+    const homeDir = join(tempRoot, "home");
+    const projectRoot = join(tempRoot, "project");
+    const projectPetDir = join(projectRoot, "public", "pets", "guga");
+
+    await mkdir(projectPetDir, { recursive: true });
+
+    await expect(readProjectPet("guga", { homeDir, projectRoot })).rejects.toThrow(
+      /pet\.json을 찾을 수 없습니다/,
+    );
+  });
+
+  it("Given a project asset is missing spritesheet When reading Then the missing spritesheet path is reported", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "codex-pet-assets-"));
+    const homeDir = join(tempRoot, "home");
+    const projectRoot = join(tempRoot, "project");
+    const projectPetDir = join(projectRoot, "public", "pets", "guga");
+
+    await mkdir(projectPetDir, { recursive: true });
+    await writeFile(
+      join(projectPetDir, "pet.json"),
+      JSON.stringify({
+        id: "guga",
+        displayName: "咕嘎",
+        description: "A display pet",
+        spritesheetPath: "spritesheet.webp",
+      }),
+    );
+
+    await expect(readProjectPet("guga", { homeDir, projectRoot })).rejects.toThrow(
+      /spritesheet을 찾을 수 없습니다/,
+    );
+  });
+
+  it("Given codex-pets did not create a local asset When copying Then the missing source folder is reported", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "codex-pet-assets-"));
+    const homeDir = join(tempRoot, "home");
+    const projectRoot = join(tempRoot, "project");
+
+    await expect(copyCodexPetToProject("guga", { homeDir, projectRoot })).rejects.toMatchObject({
+      code: "downloaded-pet-missing",
+    } satisfies Partial<PetAssetError>);
   });
 
   it("Given multiple project assets exist When listed Then valid pets are returned sorted", async () => {
@@ -78,6 +125,7 @@ describe("pet asset storage", () => {
         spritesheetPath: "spritesheet.webp",
       }),
     );
+    await writeFile(join(projectRoot, "public", "pets", "zuzu", "spritesheet.webp"), "sprite-zuzu");
     await writeFile(
       join(projectRoot, "public", "pets", "guga", "pet.json"),
       JSON.stringify({
@@ -87,6 +135,7 @@ describe("pet asset storage", () => {
         spritesheetPath: "spritesheet.webp",
       }),
     );
+    await writeFile(join(projectRoot, "public", "pets", "guga", "spritesheet.webp"), "sprite-guga");
 
     const pets = await listProjectPets({ homeDir, projectRoot });
 

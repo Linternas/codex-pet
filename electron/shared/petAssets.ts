@@ -1,95 +1,129 @@
 import { execFile } from "node:child_process";
-import { cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
+import { access, cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { promisify } from "node:util";
-import { z } from "zod";
+import {
+  PetAssetError,
+  commandFailureMessage,
+  errorCode,
+  isMissingPath,
+} from "./petAssetErrors.js";
+import { normalizeSpriteImage } from "./petImage.js";
+import { type PetManifest, type PetView, petIdSchema, petManifestSchema } from "./petSchema.js";
 
-const execFileAsync = promisify(execFile);
+export { PetAssetError };
+export type { PetAssetErrorCode } from "./petAssetErrors.js";
+export { petIdSchema, petManifestSchema, petViewSchema } from "./petSchema.js";
+export type { PetManifest, PetView } from "./petSchema.js";
 
-const MAX_SPRITESHEET_WIDTH = 1536;
-const MAX_SPRITESHEET_HEIGHT = 1872;
-
-type ImageDimensions = {
-  readonly width: number;
-  readonly height: number;
-};
-
-function parseDimension(output: string, key: string): number | undefined {
-  const match = output.match(new RegExp(`^\\s*${key}:\\s*(\\d+)`, "m"));
-  if (match?.[1] === undefined) {
-    return undefined;
-  }
-
-  const parsed = Number.parseInt(match[1], 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-}
-
-async function readImageDimensions(imagePath: string): Promise<ImageDimensions | null> {
+async function readManifestJson(path: string): Promise<unknown> {
+  let rawManifest: string;
   try {
-    const result = await execFileAsync(
-      "sips",
-      ["-g", "pixelWidth", "-g", "pixelHeight", imagePath],
-      {
-        encoding: "utf8",
-      },
-    );
-
-    const output =
-      typeof result.stdout === "string" ? result.stdout : new TextDecoder().decode(result.stdout);
-    const width = parseDimension(output, "pixelWidth");
-    const height = parseDimension(output, "pixelHeight");
-    if (width === undefined || height === undefined) {
-      return null;
+    rawManifest = await readFile(path, "utf8");
+  } catch (error) {
+    if (isMissingPath(error)) {
+      throw new PetAssetError("missing-manifest", `pet.json을 찾을 수 없습니다: ${path}`);
     }
 
-    return { width, height };
-  } catch {
-    return null;
+    throw error;
   }
-}
-
-async function normalizeSpriteImage(imagePath: string): Promise<void> {
-  const dimensions = await readImageDimensions(imagePath);
-  if (dimensions === null) {
-    return;
-  }
-
-  const scale = Math.min(
-    1,
-    MAX_SPRITESHEET_WIDTH / dimensions.width,
-    MAX_SPRITESHEET_HEIGHT / dimensions.height,
-  );
-  if (scale >= 1) {
-    return;
-  }
-
-  const targetWidth = Math.max(1, Math.round(dimensions.width * scale));
-  const targetHeight = Math.max(1, Math.round(dimensions.height * scale));
 
   try {
-    await execFileAsync("sips", ["-z", String(targetHeight), String(targetWidth), imagePath]);
-  } catch {
-    return;
+    return JSON.parse(rawManifest);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new PetAssetError("invalid-manifest", `pet.json 형식이 올바르지 않습니다: ${path}`);
+    }
+
+    throw error;
   }
 }
 
-export const petIdSchema = z.string().regex(/^[a-z0-9-]+$/);
+function parsePetManifest(rawManifest: unknown, path: string, expectedPetId: string): PetManifest {
+  const parsedManifest = petManifestSchema.safeParse(rawManifest);
+  if (!parsedManifest.success) {
+    const fields = parsedManifest.error.issues
+      .map((issue) => issue.path.join("."))
+      .filter((field) => field.length > 0)
+      .join(", ");
+    const fieldMessage = fields.length > 0 ? ` (${fields})` : "";
+    throw new PetAssetError(
+      "invalid-manifest",
+      `pet.json 필수 값이 올바르지 않습니다${fieldMessage}: ${path}`,
+    );
+  }
 
-export const petManifestSchema = z.object({
-  id: petIdSchema,
-  displayName: z.string().min(1),
-  description: z.string().min(1),
-  spritesheetPath: z.string().min(1),
-});
+  if (parsedManifest.data.id !== expectedPetId) {
+    throw new PetAssetError("invalid-manifest", `pet.json id가 요청한 pet id와 다릅니다: ${path}`);
+  }
 
-export type PetManifest = z.infer<typeof petManifestSchema>;
+  return parsedManifest.data;
+}
 
-export const petViewSchema = z.object({
-  manifest: petManifestSchema,
-  spriteUrl: z.string().min(1),
-});
+async function ensureSpriteFile(path: string): Promise<void> {
+  try {
+    await access(path);
+  } catch (error) {
+    if (isMissingPath(error)) {
+      throw new PetAssetError("missing-spritesheet", `spritesheet을 찾을 수 없습니다: ${path}`);
+    }
 
-export type PetView = z.infer<typeof petViewSchema>;
+    throw error;
+  }
+}
+
+export type PetCommandRunner = (
+  command: string,
+  args: readonly string[],
+) => Promise<{ readonly stdout: string; readonly stderr: string }>;
+
+const runPetCommand: PetCommandRunner = (command, args) =>
+  new Promise((resolve, reject) => {
+    execFile(
+      command,
+      [...args],
+      { encoding: "utf8", windowsHide: true },
+      (error, stdout, stderr) => {
+        if (error !== null) {
+          reject(Object.assign(error, { stderr, stdout }));
+          return;
+        }
+
+        resolve({ stderr, stdout });
+      },
+    );
+  });
+
+async function copyCodexPetDirectoryToProject(
+  petId: string,
+  options: PetAssetOptions,
+): Promise<void> {
+  const paths = resolvePetPaths(petId, options);
+  await mkdir(paths.projectPetDir, { recursive: true });
+
+  try {
+    await cp(paths.codexPetDir, paths.projectPetDir, { recursive: true });
+  } catch (error) {
+    if (isMissingPath(error)) {
+      throw new PetAssetError(
+        "downloaded-pet-missing",
+        `다운로드된 에셋 폴더를 찾을 수 없습니다: ${paths.codexPetDir}`,
+      );
+    }
+
+    if (error instanceof Error) {
+      throw new PetAssetError("copy-failed", `에셋 복사 실패: ${error.message}`);
+    }
+
+    throw error;
+  }
+}
+
+export async function copyCodexPetFilesToProject(
+  petId: string,
+  options: PetAssetOptions,
+): Promise<void> {
+  await copyCodexPetDirectoryToProject(petId, options);
+}
 
 export type PetPaths = {
   readonly codexPetDir: string;
@@ -117,28 +151,42 @@ export function resolvePetPaths(petId: string, options: PetAssetOptions): PetPat
 
 export async function installCodexPet(petId: string): Promise<void> {
   const parsedPetId = petIdSchema.parse(petId);
-  await execFileAsync("npx", ["--yes", "codex-pets", "add", parsedPetId], {
-    windowsHide: true,
-  });
+  try {
+    await runPetCommand("npx", ["--yes", "codex-pets", "add", parsedPetId]);
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") {
+      throw new PetAssetError(
+        "npx-missing",
+        "npx를 찾을 수 없습니다. Node.js 설치 후 다시 시도하세요.",
+      );
+    }
+
+    if (error instanceof Error) {
+      throw new PetAssetError(
+        "install-command-failed",
+        `codex-pets add 실패: ${commandFailureMessage(error)}`,
+      );
+    }
+
+    throw error;
+  }
 }
 
 export async function copyCodexPetToProject(
   petId: string,
   options: PetAssetOptions,
 ): Promise<PetView> {
-  const paths = resolvePetPaths(petId, options);
-  await mkdir(paths.projectPetDir, { recursive: true });
-  await cp(paths.codexPetDir, paths.projectPetDir, { recursive: true });
-
+  await copyCodexPetFilesToProject(petId, options);
   return readProjectPet(petId, options);
 }
 
 export async function readProjectPet(petId: string, options: PetAssetOptions): Promise<PetView> {
   const paths = resolvePetPaths(petId, options);
-  const rawManifest = await readFile(paths.projectManifestPath, "utf8");
-  const parsedJson: unknown = JSON.parse(rawManifest);
-  const manifest = petManifestSchema.parse(parsedJson);
-  await normalizeSpriteImage(join(paths.projectPetDir, manifest.spritesheetPath));
+  const parsedJson = await readManifestJson(paths.projectManifestPath);
+  const manifest = parsePetManifest(parsedJson, paths.projectManifestPath, petId);
+  const spritePath = join(paths.projectPetDir, manifest.spritesheetPath);
+  await ensureSpriteFile(spritePath);
+  await normalizeSpriteImage(spritePath);
 
   return {
     manifest,

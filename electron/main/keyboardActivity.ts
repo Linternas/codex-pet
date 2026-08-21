@@ -12,6 +12,8 @@ import { keyboardAnimationState } from "../shared/petAnimation.js";
 type KeyboardAnimationSender = (state: typeof keyboardAnimationState) => void;
 type KeyboardMonitorProcess = ChildProcessByStdio<null, Readable, Readable>;
 
+export const keyboardMonitorPermissionRequestArguments = ["--request-accessibility"] as const;
+
 let activeMonitor: KeyboardMonitorProcess | undefined;
 let permissionRetryTimer: ReturnType<typeof setTimeout> | undefined;
 const permissionRetryDelayMs = 2500;
@@ -140,6 +142,32 @@ export function startGlobalKeyboardActivity(
   monitor.stderr.on("data", (chunk: string) => {
     console.warn(chunk.trim());
   });
+}
+
+export function requestKeyboardMonitorPermission(projectRoot: string): void {
+  if (process.platform !== "darwin") {
+    return;
+  }
+
+  const monitorPath = resolveKeyboardMonitorPath(projectRoot);
+  if (!existsSync(monitorPath)) {
+    console.warn(`Codex Pet keyboard monitor is missing: ${monitorPath}`);
+    return;
+  }
+
+  const permissionRequest = spawn(
+    monitorPath,
+    Array.from(keyboardMonitorPermissionRequestArguments),
+    {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    },
+  );
+  permissionRequest.on("error", (error) => {
+    console.warn(`Codex Pet could not request Accessibility permission: ${error.message}`);
+  });
+  permissionRequest.unref();
 }
 
 export function stopGlobalKeyboardActivity(): void {

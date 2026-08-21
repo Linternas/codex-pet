@@ -1,4 +1,4 @@
-import type { PetManagerResult, PetManagerState } from "../electron/shared/ipc.js";
+import type { InstallProgress, PetManagerResult, PetManagerState } from "../electron/shared/ipc.js";
 import type { PetAnimationState } from "../electron/shared/petAnimation.js";
 import type { UpdateCheckResult } from "../electron/shared/update.js";
 
@@ -18,6 +18,7 @@ declare global {
       readonly requestAnimation: (state: PetAnimationState) => Promise<void>;
       readonly onStateChanged: (callback: (state: PetManagerState) => void) => () => void;
       readonly onAnimationRequested: (callback: (state: PetAnimationState) => void) => () => void;
+      readonly onInstallProgress: (callback: (progress: InstallProgress) => void) => () => void;
     };
   }
 }

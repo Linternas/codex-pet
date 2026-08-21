@@ -11,22 +11,21 @@ if (process.platform !== "darwin") {
 const projectRoot = process.cwd();
 const sourcePath = join(projectRoot, "native", "key-monitor", "main.swift");
 const legacyOutputPath = join(projectRoot, "dist-native", "codex-pet-key-monitor");
-const outputPath = join(
-  projectRoot,
-  "dist-native",
-  "Codex Pet Keyboard Monitor.app",
-  "Contents",
-  "MacOS",
-  "codex-pet-key-monitor",
-);
-const infoPlistPath = join(
-  projectRoot,
-  "dist-native",
-  "Codex Pet Keyboard Monitor.app",
-  "Contents",
-  "Info.plist",
-);
+const helperAppPath = join(projectRoot, "dist-native", "Codex Pet Keyboard Monitor.app");
+const outputPath = join(helperAppPath, "Contents", "MacOS", "codex-pet-key-monitor");
+const infoPlistPath = join(helperAppPath, "Contents", "Info.plist");
 const moduleCachePath = join(tmpdir(), "codex-pet-swift-module-cache");
+
+function run(command, args) {
+  const result = spawnSync(command, args, { stdio: "inherit" });
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+}
+
+function signHelperApp() {
+  run("codesign", ["--force", "--deep", "--sign", "-", helperAppPath]);
+}
 
 mkdirSync(dirname(outputPath), { recursive: true });
 mkdirSync(moduleCachePath, { recursive: true });
@@ -58,7 +57,7 @@ writeFileSync(
 `,
 );
 
-const result = spawnSync(
+const swiftResult = spawnSync(
   "xcrun",
   ["swiftc", sourcePath, "-O", "-framework", "ApplicationServices", "-o", outputPath],
   {
@@ -71,6 +70,8 @@ const result = spawnSync(
   },
 );
 
-if (result.status !== 0) {
-  process.exit(result.status ?? 1);
+if (swiftResult.status !== 0) {
+  process.exit(swiftResult.status ?? 1);
 }
+
+signHelperApp();

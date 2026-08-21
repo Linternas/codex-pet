@@ -2,11 +2,12 @@ import { z } from "zod";
 
 export const appMetadata = {
   name: "Codex Pet",
-  version: "0.0.1",
+  version: "0.0.2",
 } as const;
 
 export const releaseUpdateConfig = {
-  manifestUrl: "",
+  manifestUrl:
+    "https://github.com/Linternas/codex-pet/releases/latest/download/latest-darwin-arm64.json",
 } as const;
 
 export const releaseManifestSchema = z.object({

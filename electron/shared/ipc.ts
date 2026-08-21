@@ -2,7 +2,21 @@ import { z } from "zod";
 import { installerStatusSchema } from "./installer.js";
 import { overlayDefaults } from "./overlay.js";
 import { petAnimationStates } from "./petAnimation.js";
-import { petIdSchema, petViewSchema } from "./petAssets.js";
+import { petIdSchema, petViewSchema } from "./petSchema.js";
+
+export const installProgressPhases = [
+  "checking",
+  "downloading",
+  "copying",
+  "validating",
+  "applying",
+] as const;
+
+export const installProgressSchema = z.object({
+  phase: z.enum(installProgressPhases),
+  petId: petIdSchema,
+  message: z.string().min(1),
+});
 
 export const overlayStateSchema = z.object({
   visible: z.boolean(),
@@ -55,6 +69,7 @@ export const overlayAnimationRequestSchema = z.object({
 
 export type PetManagerState = z.infer<typeof petManagerStateSchema>;
 export type PetManagerResult = z.infer<typeof petManagerResultSchema>;
+export type InstallProgress = z.infer<typeof installProgressSchema>;
 export type InstallPetRequest = z.infer<typeof installPetRequestSchema>;
 export type PetIdRequest = z.infer<typeof petIdRequestSchema>;
 export type OverlayScaleRequest = z.infer<typeof overlayScaleRequestSchema>;
@@ -76,4 +91,5 @@ export const petChannels = {
   requestAnimation: "pet:request-animation",
   stateChanged: "pet:state-changed",
   animationRequested: "pet:animation-requested",
+  installProgress: "pet:install-progress",
 } as const;

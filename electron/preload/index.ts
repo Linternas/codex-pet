@@ -1,13 +1,14 @@
 import { createRequire } from "node:module";
 import type electronType from "electron";
 import {
+  installProgressSchema,
   overlayAnimationRequestSchema,
   overlayMoveRequestSchema,
   petChannels,
   petManagerResultSchema,
   petManagerStateSchema,
 } from "../shared/ipc.js";
-import { petIdSchema } from "../shared/petAssets.js";
+import { petIdSchema } from "../shared/petSchema.js";
 import { updateCheckResultSchema, updateDownloadRequestSchema } from "../shared/update.js";
 
 const require = createRequire(import.meta.url);
@@ -69,6 +70,13 @@ const codexPetApi = {
     };
     ipcRenderer.on(petChannels.animationRequested, listener);
     return () => ipcRenderer.removeListener(petChannels.animationRequested, listener);
+  },
+  onInstallProgress: (callback: (progress: unknown) => void) => {
+    const listener = (_event: electronType.IpcRendererEvent, progress: unknown): void => {
+      callback(installProgressSchema.parse(progress));
+    };
+    ipcRenderer.on(petChannels.installProgress, listener);
+    return () => ipcRenderer.removeListener(petChannels.installProgress, listener);
   },
 };
 

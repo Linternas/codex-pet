@@ -10,13 +10,13 @@ import {
 } from "../electron/shared/release.js";
 
 describe("release metadata", () => {
-  it("Given package metadata When checked Then the app version is v0.0.1", async () => {
+  it("Given package metadata When checked Then the app version is v0.0.2", async () => {
     const packageJson = JSON.parse(
       await readFile(new URL("../package.json", import.meta.url), "utf8"),
     );
 
     expect(packageJson.version).toBe(appMetadata.version);
-    expect(formatVersionTag(appMetadata.version)).toBe("v0.0.1");
+    expect(formatVersionTag(appMetadata.version)).toBe("v0.0.2");
   });
 
   it("Given release coordinates When creating a DMG file name Then it includes version platform and arch", () => {
@@ -44,7 +44,7 @@ describe("release metadata", () => {
 
   it("Given current app version When checking release manifest Then newer versions are detected", () => {
     const manifest = createReleaseManifest({
-      version: "0.0.2",
+      version: "0.0.3",
       platform: "darwin",
       arch: "arm64",
       sha256: "b".repeat(64),
@@ -52,13 +52,14 @@ describe("release metadata", () => {
       releaseDate: "2026-06-17T00:00:00.000Z",
     });
 
-    expect(compareVersions("0.0.2", "0.0.1")).toBeGreaterThan(0);
+    expect(compareVersions("0.0.3", "0.0.2")).toBeGreaterThan(0);
     expect(isReleaseNewer(appMetadata.version, manifest)).toBe(true);
   });
 
   it("Given the DMG package script When app contents are changed Then it re-signs and verifies the app bundle", async () => {
     const script = await readFile(new URL("../scripts/package-dmg.mjs", import.meta.url), "utf8");
 
+    expect(script).toContain("CODEX_PET_CODESIGN_IDENTITY");
     expect(script).toContain('run("codesign", [');
     expect(script).toContain('"--force"');
     expect(script).toContain('"--deep"');
@@ -66,6 +67,28 @@ describe("release metadata", () => {
     expect(script).toContain('"-"');
     expect(script).toContain('"--verify"');
     expect(script.indexOf('run("codesign", [')).toBeLessThan(script.indexOf('run("hdiutil", ['));
+  });
+
+  it("Given Developer ID release settings When packaging a DMG Then notarization hooks are available", async () => {
+    const script = await readFile(new URL("../scripts/package-dmg.mjs", import.meta.url), "utf8");
+
+    expect(script).toContain("CODEX_PET_NOTARIZE");
+    expect(script).toContain('run("xcrun", ["notarytool", "submit"');
+    expect(script).toContain('run("xcrun", ["stapler", "staple"');
+    expect(script).toContain('run("spctl", [');
+  });
+
+  it("Given the release workflow When publishing a DMG Then it uploads the manifest with the installer", async () => {
+    const workflow = await readFile(
+      new URL("../.github/workflows/release.yml", import.meta.url),
+      "utf8",
+    );
+
+    expect(workflow).toContain("CODEX_PET_CERTIFICATE_BASE64");
+    expect(workflow).toContain("CODEX_PET_NOTARY_PRIVATE_KEY");
+    expect(workflow).toContain("pnpm package:dmg");
+    expect(workflow).toContain("gh release create");
+    expect(workflow).toContain("release/latest-darwin-arm64.json");
   });
 
   it("Given the DMG package script When copying Electron app bundles Then framework symlinks are preserved", async () => {

@@ -60,5 +60,6 @@ export function getPetApi(): PetApi {
     requestAnimation: async () => undefined,
     onStateChanged: () => () => undefined,
     onAnimationRequested: () => () => undefined,
+    onInstallProgress: () => () => undefined,
   };
 }

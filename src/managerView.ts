@@ -14,12 +14,13 @@ export type ManagerRefs = {
   readonly scale: HTMLInputElement;
   readonly scaleValue: HTMLElement;
   readonly installHelp: HTMLElement | null;
-  readonly installerStatus: HTMLElement;
+  readonly installerStatus: HTMLElement | null;
   readonly homebrewCommand: HTMLElement | null;
   readonly nodeCommand: HTMLElement | null;
   readonly openAccessibilitySettingsButton: HTMLButtonElement;
-  readonly updateDownloadButton?: HTMLButtonElement;
-  readonly updateStatus?: HTMLElement;
+  readonly updateCheckButton: HTMLButtonElement | null;
+  readonly updateDownloadButton: HTMLButtonElement | null;
+  readonly updateStatus: HTMLElement | null;
 };
 
 export type ManagerRuntime = {
@@ -145,7 +146,7 @@ export function renderUpdateResult(
   runtime: ManagerRuntime,
   result: UpdateCheckResult,
 ): void {
-  if (refs.updateDownloadButton === undefined || refs.updateStatus === undefined) {
+  if (refs.updateDownloadButton === null || refs.updateStatus === null) {
     return;
   }
 

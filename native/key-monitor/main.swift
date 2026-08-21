@@ -6,18 +6,25 @@ let readyMessage = Data("ready\n".utf8)
 let keyDownMessage = Data("keyDown\n".utf8)
 let permissionRequiredMessage = Data("permission-required\n".utf8)
 let tapUnavailableMessage = Data("tap-unavailable\n".utf8)
+let accessibilityPromptArgument = "--request-accessibility"
+let shouldPromptForAccessibility = CommandLine.arguments.contains(accessibilityPromptArgument)
 
 func writeStdout(_ data: Data) {
   FileHandle.standardOutput.write(data)
 }
 
 let accessibilityOptions = [
-  kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: false,
+  kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: shouldPromptForAccessibility,
 ] as CFDictionary
 
 guard AXIsProcessTrustedWithOptions(accessibilityOptions) else {
   writeStdout(permissionRequiredMessage)
   exit(2)
+}
+
+if shouldPromptForAccessibility {
+  writeStdout(readyMessage)
+  exit(0)
 }
 
 let keyDownMask = CGEventMask(1 << CGEventType.keyDown.rawValue)

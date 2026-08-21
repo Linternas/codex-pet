@@ -16,15 +16,16 @@ import {
   overlayDefaults,
   resolveOverlayScaleFromWidth,
 } from "../shared/overlay.js";
-import {
-  copyCodexPetToProject,
-  deleteProjectPet,
-  installCodexPet,
-  listProjectPets,
-} from "../shared/petAssets.js";
+import { deleteProjectPet, listProjectPets } from "../shared/petAssets.js";
 import { readPetPreferences, writePetPreferences } from "../shared/userPreferences.js";
+import { openAccessibilitySettingsPanel } from "./accessibilitySettings.js";
+import { installPetWithProgress } from "./installPetWorkflow.js";
 import { getInstallerStatus } from "./installerStatus.js";
-import { startGlobalKeyboardActivity, stopGlobalKeyboardActivity } from "./keyboardActivity.js";
+import {
+  requestKeyboardMonitorPermission,
+  startGlobalKeyboardActivity,
+  stopGlobalKeyboardActivity,
+} from "./keyboardActivity.js";
 import { createOverlayWindowController } from "./overlayWindow.js";
 import { registerPetIpcHandlers } from "./petIpc.js";
 import { resolveRendererUrl } from "./rendererUrl.js";
@@ -42,8 +43,6 @@ let appliedPetId: string | null = null;
 let overlayScale: number = overlayDefaults.defaultScale;
 const overlayController = createOverlayWindowController({ preloadPath, projectRoot });
 app.setName("Codex Pet");
-const accessibilitySettingsUrl =
-  "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
 
 function startKeyboardMonitor(): void {
   startGlobalKeyboardActivity(projectRoot, (state) => overlayController.sendAnimation(state));
@@ -117,7 +116,9 @@ function focusMainWindow(): void {
 
 async function openAccessibilitySettings(): Promise<void> {
   if (process.platform === "darwin") {
-    await shell.openExternal(accessibilitySettingsUrl);
+    requestKeyboardMonitorPermission(projectRoot);
+    startKeyboardMonitor();
+    await openAccessibilitySettingsPanel(shell);
     return;
   }
 
@@ -160,15 +161,23 @@ async function applyPet({ petId }: PetIdRequest): Promise<PetManagerResult> {
   await overlayController.ensure(overlayScale, devServerUrl);
   overlayController.showInactive();
   overlayController.resize(overlayScale);
-  focusMainWindow();
 
   return { kind: "ready", state: await publishState() };
 }
 
 async function installPet({ petId }: InstallPetRequest): Promise<PetManagerResult> {
-  await installCodexPet(petId);
-  await copyCodexPetToProject(petId, { homeDir: homedir(), projectRoot });
-  return applyPet({ petId });
+  return await installPetWithProgress(
+    { petId },
+    {
+      applyPet,
+      getInstallerStatus,
+      homeDir: homedir(),
+      projectRoot,
+      sendProgress: (progress) => {
+        mainWindow?.webContents.send(petChannels.installProgress, progress);
+      },
+    },
+  );
 }
 
 async function deletePet({ petId }: PetIdRequest): Promise<PetManagerResult> {
@@ -236,9 +245,7 @@ async function startApp(): Promise<void> {
   await restorePreferences();
   startKeyboardMonitor();
   createMenuBarItem();
-  await createWindow();
   await showInitialPet();
-  focusMainWindow();
 }
 
 if (process.platform !== "darwin") {
