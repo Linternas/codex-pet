@@ -2,8 +2,8 @@ import { type InstallerStatus, resolveInstallerStatus } from "../shared/installe
 
 let cachedStatus: InstallerStatus | undefined;
 
-export async function getInstallerStatus(): Promise<InstallerStatus> {
-  if (cachedStatus === undefined) {
+export async function getInstallerStatus(refresh = false): Promise<InstallerStatus> {
+  if (refresh || cachedStatus === undefined) {
     cachedStatus = await resolveInstallerStatus();
   }
 

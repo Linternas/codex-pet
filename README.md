@@ -1,9 +1,9 @@
 # Codex Pet Mac
 
-현재 앱 버전은 `v0.0.1`입니다.
+현재 앱 버전은 `v0.0.2`입니다.
 
 macOS 전용 Electron 앱입니다. `npx codex-pets add <pet-id>`로 받은 pet asset을
-프로젝트 안의 `public/pets/<pet-id>`에 저장하고, 투명한 데스크톱 오버레이 창에
+앱 사용자 데이터 폴더의 `pets/<pet-id>`에 저장하고, 투명한 데스크톱 오버레이 창에
 캐릭터를 표시합니다.
 
 캐릭터 목록과 pet id는 [codex-pets.net](https://codex-pets.net/)에서 확인할 수 있습니다.
@@ -15,19 +15,38 @@ macOS 전용 Electron 앱입니다. `npx codex-pets add <pet-id>`로 받은 pet 
 앱은 에셋 추가 전에 `npx -v`로 `npx`가 있는지 확인합니다. `npx`가 없으면 pet id 입력과
 추가 버튼이 비활성화됩니다.
 
-`npx`는 Node.js에 포함되어 있습니다. macOS에 Node.js가 없다면 아래 순서로 설치합니다.
+`npx`가 없거나 실행할 수 없으면 **Node.js + npx 자동 설치** 버튼을 표시합니다.
+버튼을 누르면 설치 내용과 위치를 안내하는 확인 창이 열립니다. **설치**를 선택한 경우에만
+curl로 Node.js 공식 LTS macOS 아카이브를 다운로드하고 SHA256을 검증한 뒤,
+앱 전용 사용자 폴더에 압축을 풀어 설치합니다. 완료 즉시 npx를 다시 확인하고 캐릭터 다운로드를 활성화합니다.
+PKG 실행이나 관리자 암호는 필요하지 않습니다. 시스템 Node.js나 셸 설정은 변경하지 않습니다.
+설치 경로는 `~/Library/Application Support/Codex Pet/runtime/current`이며 앱의 명령 PATH에 추가합니다.
+Finder로 실행해도 `/usr/local/bin`, `/opt/homebrew/bin`, nvm 설치 경로를 함께 확인합니다.
 
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-brew install node
-```
+## 앱 내 안내 페이지
 
-설치 후 앱을 다시 실행하면 `npx -v` 확인을 다시 수행합니다.
+상단 메뉴에서 **캐릭터 / 권한 설정 / 버전 히스토리**를 전환합니다.
+설정 창은 상단 상태바 아이콘으로만 엽니다. 처음 설정 창을 열면 권한 안내가 먼저 표시됩니다. 캐릭터 메뉴를 선택하면
+다음 실행부터 캐릭터 화면이 열리며, 안내는 메뉴에서 언제든 다시 볼 수 있습니다.
+
+권한 안내는 손쉬운 사용 목록에서 **Codex Pet**을 허용하는 순서를 제공합니다.
+목록에 없다면 **+**로 설치한 Codex Pet.app을 추가합니다.
+앱의 손쉬운 사용 권한이 없으면 헤더 권한 안내에 붉은 테두리와 !를 표시합니다.
+앱으로 돌아오거나 창이 보이는 동안 2.5초마다 다시 확인하며, 허용되면 표시를 해제합니다.
+캐릭터 화면의 별도 권한 설정 버튼은 제거했습니다.
+
+현재 버전의 [패치 노트](docs/releases/v0.0.2.md)는 앱에 포함됩니다.
+버전 히스토리는 GitHub Releases에서 게시된 최근 100개 기록을 읽어 버전, 날짜, 변경 내용,
+현재 앱 버전과 사전 릴리스 여부를 표시합니다. 인터넷 연결이 필요하며 실패하면 새로고침으로
+재시도할 수 있습니다. 같은 페이지에서 앱 업데이트를 다운로드하고 설치할 수 있습니다.
+
+macOS에서는 시작 시부터 accessory 정책을 적용하고 앱 번들에 `LSUIElement`를 설정해
+Dock 아이콘을 표시하지 않습니다. 창을 닫아도 상태바 아이콘은 남으며, 클릭하면 다시 열립니다.
 
 ## 앱 아이콘
 
 앱 아이콘은 pet 에셋 경로(`public/pets`)와 별도로 관리됩니다.  
-`scripts/build-app-icon.mjs`는 프로젝트 루트의 `image1.png` 또는 `image1.jpg`를 읽어
+`scripts/build-app-icon.mjs`는 투명 배경의 `build/Codex-Pet-source.png`를 우선 사용하고, 없으면 프로젝트 루트의 `image1.png` 또는 `image1.jpg`를 읽어
 `build/Codex-Pet.icns`를 생성하고, DMG 패키징 시 이 파일을 앱 번들에 반영합니다.
 
 권장 입력 파일:
@@ -42,19 +61,24 @@ brew install node
 ## 에셋 추가
 
 1. [codex-pets.net](https://codex-pets.net/)에서 사용할 pet id를 확인합니다.
-2. 관리자 창의 입력창에 pet id를 입력합니다.
-3. 추가 버튼을 누르면 앱이 `npx --yes codex-pets add <pet-id>`를 실행합니다.
-4. 다운로드된 에셋은 `public/pets/<pet-id>`에 저장되고, 적용 버튼으로 화면에 표시합니다.
+2. 관리자 창에 `frieren-full`처럼 pet id만 입력합니다.
+3. 다운로드 버튼을 누르면 앱이 `npx --yes codex-pets add <pet-id>`를 실행합니다.
+4. 다운로드 성공 후 목록에 추가하고 바로 적용합니다.
 
 ## 기능
 
 - 추가: 관리자 창에서 pet id를 입력하면 `npx --yes codex-pets add <pet-id>`를 실행하고
-  `public/pets/<pet-id>`로 복사합니다.
-- 삭제: 프로젝트에 저장된 `public/pets/<pet-id>` 복사본만 삭제합니다.
+  앱 사용자 데이터 폴더의 `pets/<pet-id>`로 복사합니다.
+- 삭제: 앱 사용자 데이터 폴더의 복사본만 삭제합니다. Codex CLI 원본과 앱에 포함된 번들 파일은 보존합니다.
 - 적용: 선택한 pet을 투명 오버레이 창에 표시합니다.
 - 이동: 오버레이 캐릭터 영역을 드래그해서 위치를 옮깁니다.
-- 애니메이션: spritesheet의 9개 행을 idle/run/waving/jumping/running/review 상태로
-  매핑하고, 투명하지 않은 프레임만 순환합니다.
+- 버전: 목록과 미리보기에 v1/v2를 표시합니다. v1은 8×9(9개 기본 동작), v2는
+  8×11(9개 기본 동작 + 16방향 시선)입니다. 버전 필드가 없으면 v1로 처리합니다.
+- 애니메이션: 비어 있지 않은 프레임을 순환합니다. 9개 동작 버튼은 적용된 펫을 움직입니다.
+  클릭은 인사, 키보드 입력은 인사·작업·검토로 전환, 더블클릭은 점프, 드래그는 좌우 달리기,
+  30초간 반응이 없으면 대기합니다. v2는 캐릭터 위 마우스 방향을 바라봅니다.
+- 크기 조절 아이콘: 관리자 슬라이더와 오버레이 핸들에 Lucide 아이콘을 표시합니다.
+- 실행 위치: Dock에는 표시하지 않고 상단 상태바 아이콘으로 관리자 창을 다시 엽니다.
 - 크기 조정: 기본 65%, 최대 100%입니다. 관리자 창의 크기 슬라이더나 오버레이 우하단
   핸들로 조정합니다.
 - 오버레이 핸들: 마우스를 올렸을 때만 우하단 resize 핸들이 보입니다.
@@ -67,7 +91,7 @@ brew install node
 
 OS 전체 키보드 입력 감지는 macOS 손쉬운 사용 권한이 있어야 동작합니다.
 
-권한 요청 대상 이름은 `Codex Pet Keyboard Monitor`입니다. 시스템 설정에서 아래 경로로 이동해
+설치한 `Codex Pet`의 권한을 켭니다. 시스템 설정에서 아래 경로로 이동해
 허용합니다.
 
 ```text
@@ -75,14 +99,23 @@ System Settings > Privacy & Security > Accessibility
 ```
 
 `pnpm start`로 실행하는 개발 모드에서도 키보드 감지를 위해
-`dist-native/Codex Pet Keyboard Monitor.app` 번들을 생성합니다. 권한 목록에 자동으로 보이지
-않으면 위 경로에서 직접 추가합니다.
+`dist-native/Codex Pet Keyboard Monitor.app` 번들을 생성합니다. 설치본에서 Codex Pet 권한으로 키보드 반응이 동작하면
+도우미를 별도로 권한 목록에 추가할 필요가 없습니다.
 
 ## 저장 경로
 
-- Codex CLI 설치 원본: `~/.codex/pets/<pet-id>`
-- 프로젝트 저장본: `public/pets/<pet-id>`
-- 화면 표시 이미지: `public/pets/<pet-id>/spritesheet.webp`
+- Codex CLI 원본: `${CODEX_HOME:-~/.codex}/pets/<pet-id>`
+- 앱 저장본: `app.getPath("userData")/pets/<pet-id>` (macOS 기본: `~/Library/Application Support/Codex Pet/pets`)
+- 기본 번들: `public/pets`에서 최초 실행 시 한 번 복사합니다. 삭제한 펫은 재시작 시 복원하지 않습니다.
+- 이미지: `pet-asset://<pet-id>/spritesheet.webp` 프로토콜로 읽어 개발/설치 환경에서 동일하게 표시합니다.
+- 실패한 다운로드는 목록에 추가하지 않습니다. 중복 pet id는 삭제 후 다시 받을 수 있습니다.
+
+## 원격 업데이트
+
+무료 오픈소스 Sparkle 2.9.6을 사용합니다. 새 버전이 있으면 상단에 **업데이트** 버튼이 나타납니다.
+버전 히스토리에서 현재·최신 버전을 비교하고 **업데이트 다운로드 → 재시작하여 설치**를 실행합니다.
+배포 시 서명된 ZIP과 appcast.xml을 GitHub Release에 함께 게시해야 합니다.
+[배포 절차와 검증 범위](docs/github-release-updates.md)를 참고하세요.
 
 ## 로컬 개발 실행
 
@@ -92,6 +125,11 @@ pnpm import:guga
 pnpm start
 ```
 
-`pnpm start`를 실행하면 관리자 창과 캐릭터 오버레이 창이 함께 열립니다.
+`pnpm start`를 실행하면 캐릭터 오버레이가 열립니다. 설정 창은 상단 상태바 아이콘으로 엽니다.
 
 개발 프리뷰는 `pnpm dev:app`으로 확인합니다.
+
+키보드 입력을 시작하면 짧게 인사하고, 계속 입력하면 작업 중 동작으로 전환합니다.
+입력을 멈춘 뒤 2.5초에는 검토, 10초에는 휴식, 30초에는 대기로 전환합니다.
+30초 이상 쉬었다 다시 입력하면 인사합니다. 클릭·드래그·동작 버튼 반응이 자동 반응보다 우선합니다.
+캐릭터 적용 성공 시 인사하고 다운로드 완료 시 점프합니다.

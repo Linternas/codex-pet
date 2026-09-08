@@ -1,7 +1,9 @@
+import { access, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type electronType from "electron";
+import { appUpdateChannels } from "../shared/appUpdate.js";
 import {
   type InstallPetRequest,
   type OverlayResizeRequest,
@@ -17,24 +19,48 @@ import {
   resolveOverlayScaleFromWidth,
 } from "../shared/overlay.js";
 import {
+  type PetView,
   copyCodexPetToProject,
   deleteProjectPet,
+  initializePetStorage,
   installCodexPet,
   listProjectPets,
+  resolvePetPaths,
 } from "../shared/petAssets.js";
 import { readPetPreferences, writePetPreferences } from "../shared/userPreferences.js";
 import { getInstallerStatus } from "./installerStatus.js";
 import { startGlobalKeyboardActivity, stopGlobalKeyboardActivity } from "./keyboardActivity.js";
+import { installNodeRuntime } from "./nodeRuntimeInstaller.js";
 import { createOverlayWindowController } from "./overlayWindow.js";
 import { registerPetIpcHandlers } from "./petIpc.js";
+import { getReleaseHistory } from "./releaseHistoryService.js";
 import { resolveRendererUrl } from "./rendererUrl.js";
+import { registerSparkleUpdater } from "./sparkleUpdater.js";
 import { type StatusTray, createStatusTray } from "./statusTray.js";
 import { registerUpdateIpcHandlers } from "./updateIpc.js";
 
 const require = createRequire(import.meta.url);
 const electron: typeof electronType = require("electron");
-const { BrowserWindow, Menu, Tray, app, dialog, ipcMain, nativeImage, shell } = electron;
+const {
+  BrowserWindow,
+  Menu,
+  Tray,
+  app,
+  dialog,
+  ipcMain,
+  nativeImage,
+  shell,
+  protocol,
+  net,
+  systemPreferences,
+} = electron;
 const projectRoot = process.cwd();
+const assetOptions = () => ({
+  homeDir: homedir(),
+  projectRoot,
+  petsRoot: join(app.getPath("userData"), "pets"),
+});
+let cachedPets: readonly PetView[] | undefined;
 const preloadPath = join(projectRoot, "electron-preload.cjs");
 let mainWindow: InstanceType<typeof BrowserWindow> | undefined;
 let statusTray: StatusTray | undefined;
@@ -46,15 +72,16 @@ const accessibilitySettingsUrl =
   "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
 
 function startKeyboardMonitor(): void {
-  startGlobalKeyboardActivity(projectRoot, (state) => overlayController.sendAnimation(state));
+  startGlobalKeyboardActivity(projectRoot, () => overlayController.sendKeyboardActivity());
 }
 
 async function getState(): Promise<PetManagerState> {
-  const pets = await listProjectPets({ homeDir: homedir(), projectRoot });
+  const pets = cachedPets ?? (await listProjectPets(assetOptions()));
+  cachedPets = pets;
   const appliedPet = pets.find((pet) => pet.manifest.id === appliedPetId);
 
   if (appliedPet === undefined) {
-    appliedPetId = pets[0]?.manifest.id ?? null;
+    appliedPetId = null;
   }
 
   return {
@@ -89,12 +116,22 @@ async function createWindow(): Promise<void> {
     minWidth: 860,
     minHeight: 620,
     title: "Codex Pet",
+    skipTaskbar: true,
     backgroundColor: "#f6f1e8",
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url === "https://codex-pets.net/" || url === "https://codex-pets.net") {
+      void shell.openExternal(url).catch((error: unknown) => {
+        dialog.showErrorBox("브라우저를 열지 못했습니다", String(error));
+      });
+    }
+    return { action: "deny" };
   });
 
   mainWindow.on("closed", () => {
@@ -113,6 +150,7 @@ function focusMainWindow(): void {
   mainWindow.moveTop();
   mainWindow.focus();
   app.focus({ steal: true });
+  if (process.platform === "darwin") app.dock?.hide();
 }
 
 async function openAccessibilitySettings(): Promise<void> {
@@ -155,24 +193,30 @@ async function publishState(): Promise<PetManagerState> {
 
 async function applyPet({ petId }: PetIdRequest): Promise<PetManagerResult> {
   const { VITE_DEV_SERVER_URL: devServerUrl } = process.env;
+  const state = await getState();
+  if (!state.pets.some((pet) => pet.manifest.id === petId))
+    throw new Error("캐릭터를 찾을 수 없습니다.");
   await writePetPreferences(app.getPath("userData"), { appliedPetId: petId });
   appliedPetId = petId;
   await overlayController.ensure(overlayScale, devServerUrl);
   overlayController.showInactive();
   overlayController.resize(overlayScale);
-  focusMainWindow();
 
   return { kind: "ready", state: await publishState() };
 }
 
 async function installPet({ petId }: InstallPetRequest): Promise<PetManagerResult> {
+  if ((await getState()).pets.some((pet) => pet.manifest.id === petId))
+    throw new Error("이미 다운로드한 캐릭터입니다.");
   await installCodexPet(petId);
-  await copyCodexPetToProject(petId, { homeDir: homedir(), projectRoot });
+  await copyCodexPetToProject(petId, assetOptions());
+  cachedPets = undefined;
   return applyPet({ petId });
 }
 
 async function deletePet({ petId }: PetIdRequest): Promise<PetManagerResult> {
-  await deleteProjectPet(petId, { homeDir: homedir(), projectRoot });
+  await deleteProjectPet(petId, assetOptions());
+  cachedPets = undefined;
   if (appliedPetId === petId) {
     await writePetPreferences(app.getPath("userData"), { appliedPetId: null });
     appliedPetId = null;
@@ -203,6 +247,10 @@ registerPetIpcHandlers(ipcMain, {
   installPet,
   moveOverlay: (deltaX, deltaY) => overlayController.moveBy(deltaX, deltaY),
   requestAnimation: (state) => overlayController.sendAnimation(state),
+  refreshInstaller: async () => {
+    await getInstallerStatus(true);
+    return { kind: "ready", state: await publishState() };
+  },
   resizeOverlay,
   setOverlayScale,
   toErrorResult,
@@ -230,15 +278,31 @@ async function showInitialPet(): Promise<void> {
 async function restorePreferences(): Promise<void> {
   const preferences = await readPetPreferences(app.getPath("userData"));
   appliedPetId = preferences.appliedPetId;
+  if (appliedPetId === null) appliedPetId = (await getState()).pets[0]?.manifest.id ?? null;
 }
 
 async function startApp(): Promise<void> {
+  await initializePetStorage(assetOptions());
+  protocol.handle("pet-asset", async (request) => {
+    try {
+      const url = new URL(request.url);
+      if (url.pathname !== "/spritesheet.webp") return new Response(null, { status: 404 });
+      const path = resolvePetPaths(url.hostname, assetOptions()).projectSpritePath;
+      return new Response(await readFile(path), {
+        headers: {
+          "Content-Type": "image/webp",
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": "no-cache",
+        },
+      });
+    } catch {
+      return new Response(null, { status: 404 });
+    }
+  });
   await restorePreferences();
   startKeyboardMonitor();
   createMenuBarItem();
-  await createWindow();
   await showInitialPet();
-  focusMainWindow();
 }
 
 if (process.platform !== "darwin") {
@@ -253,8 +317,52 @@ if (process.platform !== "darwin") {
   await app.whenReady();
   app.setActivationPolicy("accessory");
   app.dock?.hide();
-  await startApp();
   ipcMain.handle(petChannels.openAccessibilitySettings, openAccessibilitySettings);
+  ipcMain.handle(petChannels.getAccessibilityPermission, () =>
+    systemPreferences.isTrustedAccessibilityClient(false),
+  );
+  ipcMain.handle(petChannels.getReleaseHistory, () =>
+    getReleaseHistory((url, options) => net.fetch(url, options)),
+  );
+  ipcMain.handle(petChannels.revealKeyboardMonitor, async () => {
+    const helperPath = join(projectRoot, "dist-native", "Codex Pet Keyboard Monitor.app");
+    try {
+      await access(helperPath);
+    } catch {
+      throw new Error("키보드 도우미를 찾지 못했습니다. 앱을 다시 설치한 후 시도하세요.");
+    }
+    shell.showItemInFolder(helperPath);
+  });
+  let nodeInstallRequest: Promise<boolean> | undefined;
+  ipcMain.handle(petChannels.downloadNode, () => {
+    nodeInstallRequest ??= (async () => {
+      const options: electronType.MessageBoxOptions = {
+        type: "question",
+        title: "Node.js 및 npx 설치",
+        message: "캐릭터 다운로드에 필요한 Node.js와 npx를 설치할까요?",
+        detail:
+          "Node.js 공식 사이트에서 파일을 다운로드하여 앱 전용 폴더에 설치합니다.\n\n설치 위치: ~/Library/Application Support/Codex Pet/runtime\n\n기존 Node.js와 시스템 설정은 변경하지 않습니다.",
+        buttons: ["취소", "설치"],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      };
+      const { response } = await (mainWindow && !mainWindow.isDestroyed()
+        ? dialog.showMessageBox(mainWindow, options)
+        : dialog.showMessageBox(options));
+      if (response !== 1) return false;
+      await installNodeRuntime();
+      return true;
+    })().finally(() => {
+      nodeInstallRequest = undefined;
+    });
+    return nodeInstallRequest;
+  });
+
+  registerSparkleUpdater(app, ipcMain, (state) => {
+    mainWindow?.webContents.send(appUpdateChannels.changed, state);
+  });
+  await startApp();
 
   app.on("browser-window-focus", () => {
     startKeyboardMonitor();

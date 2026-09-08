@@ -19,6 +19,7 @@ import type { PetAnimationState } from "../shared/petAnimation.js";
 type PetIpcHandlers = {
   readonly applyPet: (request: PetIdRequest) => Promise<PetManagerResult>;
   readonly deletePet: (request: PetIdRequest) => Promise<PetManagerResult>;
+  readonly refreshInstaller: () => Promise<PetManagerResult>;
   readonly getState: () => Promise<PetManagerState>;
   readonly installPet: (request: InstallPetRequest) => Promise<PetManagerResult>;
   readonly moveOverlay: (deltaX: number, deltaY: number) => void;
@@ -33,6 +34,7 @@ function parseRequest<T>(schema: { readonly parse: (value: unknown) => T }, valu
 }
 
 export function registerPetIpcHandlers(ipcMain: IpcMain, handlers: PetIpcHandlers): void {
+  ipcMain.handle(petChannels.refreshInstaller, () => handlers.refreshInstaller());
   ipcMain.handle(petChannels.getState, async (): Promise<PetManagerResult> => {
     try {
       return { kind: "ready", state: await handlers.getState() };
@@ -47,7 +49,7 @@ export function registerPetIpcHandlers(ipcMain: IpcMain, handlers: PetIpcHandler
       try {
         return await handlers.installPet(parseRequest(installPetRequestSchema, payload));
       } catch (error) {
-        return handlers.toErrorResult(error, await handlers.getState());
+        return handlers.toErrorResult(error, await handlers.getState().catch(() => undefined));
       }
     },
   );
@@ -58,7 +60,7 @@ export function registerPetIpcHandlers(ipcMain: IpcMain, handlers: PetIpcHandler
       try {
         return await handlers.deletePet(parseRequest(petIdRequestSchema, payload));
       } catch (error) {
-        return handlers.toErrorResult(error, await handlers.getState());
+        return handlers.toErrorResult(error, await handlers.getState().catch(() => undefined));
       }
     },
   );
@@ -67,7 +69,7 @@ export function registerPetIpcHandlers(ipcMain: IpcMain, handlers: PetIpcHandler
     try {
       return await handlers.applyPet(parseRequest(petIdRequestSchema, payload));
     } catch (error) {
-      return handlers.toErrorResult(error, await handlers.getState());
+      return handlers.toErrorResult(error, await handlers.getState().catch(() => undefined));
     }
   });
 
@@ -77,7 +79,7 @@ export function registerPetIpcHandlers(ipcMain: IpcMain, handlers: PetIpcHandler
       try {
         return await handlers.setOverlayScale(parseRequest(overlayScaleRequestSchema, payload));
       } catch (error) {
-        return handlers.toErrorResult(error, await handlers.getState());
+        return handlers.toErrorResult(error, await handlers.getState().catch(() => undefined));
       }
     },
   );
@@ -88,7 +90,7 @@ export function registerPetIpcHandlers(ipcMain: IpcMain, handlers: PetIpcHandler
       try {
         return await handlers.resizeOverlay(parseRequest(overlayResizeRequestSchema, payload));
       } catch (error) {
-        return handlers.toErrorResult(error, await handlers.getState());
+        return handlers.toErrorResult(error, await handlers.getState().catch(() => undefined));
       }
     },
   );

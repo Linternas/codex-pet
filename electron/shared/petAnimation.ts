@@ -13,7 +13,10 @@ export const petAnimationStates = [
 export type PetAnimationState = (typeof petAnimationStates)[number];
 
 export const defaultAnimationState = "idle" as const;
-export const keyboardAnimationState = "waving" as const;
+
+export function resolveSpriteGrid(version = 1): { columns: number; rows: number } {
+  return { columns: 8, rows: version === 2 ? 11 : 9 };
+}
 
 export const spriteGrid = {
   columns: 8,
@@ -69,13 +72,14 @@ function clampFrameIndex(index: number, maxIndex: number): number {
 export function resolveSpritePosition(
   state: PetAnimationState,
   columnIndex: number,
+  version = 1,
 ): SpritePosition {
   const column = clampFrameIndex(columnIndex, spriteGrid.columns - 1);
   const row = resolveAnimationRow(state);
 
   return {
     x: formatPercent((column / (spriteGrid.columns - 1)) * 100),
-    y: formatPercent((row / (spriteGrid.rows - 1)) * 100),
+    y: formatPercent((row / (resolveSpriteGrid(version).rows - 1)) * 100),
   };
 }
 
@@ -123,4 +127,28 @@ export function resolveDragAnimationState(deltaX: number): PetAnimationState {
   }
 
   return "idle";
+}
+
+export const animationLabels: Record<PetAnimationState, string> = {
+  idle: "쉬기",
+  "run-right": "오른쪽 달리기",
+  "run-left": "왼쪽 달리기",
+  waving: "인사",
+  jumping: "점프",
+  failed: "실패",
+  waiting: "대기",
+  running: "작업 중",
+  review: "검토",
+};
+
+export function resolveLookPosition(direction: number): SpritePosition {
+  const index = ((Math.round(direction / 22.5) % 16) + 16) % 16;
+  return {
+    x: formatPercent(((index % 8) / 7) * 100),
+    y: formatPercent(((9 + Math.floor(index / 8)) / 10) * 100),
+  };
+}
+
+export function resolveRestAnimation(lastActivityAt: number, now: number): PetAnimationState {
+  return now - lastActivityAt >= 30_000 ? "waiting" : "idle";
 }

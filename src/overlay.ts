@@ -1,4 +1,10 @@
+import { MoveDiagonal2, createElement } from "lucide";
 import type { PetManagerState } from "../electron/shared/ipc.js";
+import {
+  type KeyboardAnimationActivity,
+  recordKeyboardActivity,
+  resolveKeyboardAnimation,
+} from "../electron/shared/keyboardAnimation.js";
 import {
   type PetAnimationState,
   animationTiming,
@@ -6,6 +12,9 @@ import {
   resolveAnimationFrameDurationMs,
   resolveAnimationRow,
   resolveDragAnimationState,
+  resolveLookPosition,
+  resolveRestAnimation,
+  resolveSpriteGrid,
   resolveSpritePosition,
 } from "../electron/shared/petAnimation.js";
 import {
@@ -30,7 +39,12 @@ type DragSession = {
 };
 
 type AnimationRuntime = {
+  keyboard: KeyboardAnimationActivity;
   column: number;
+  version: number;
+  lookDirection: number;
+  lastActivityAt: number;
+  frameDurationMs: number;
   dragState: PetAnimationState | null;
   hover: boolean;
   lastFrameAt: number;
@@ -55,15 +69,15 @@ function resolveRuntimeState(runtime: AnimationRuntime, now: number): PetAnimati
     return runtime.dragState;
   }
 
-  if (runtime.hover) {
-    return "jumping";
-  }
-
   if (runtime.requestedState !== null && now <= runtime.requestedUntil) {
     return runtime.requestedState;
   }
 
-  return defaultAnimationState;
+  const keyboardState = resolveKeyboardAnimation(runtime.keyboard, now);
+  if (keyboardState !== null) return keyboardState;
+
+  if (runtime.hover && runtime.version !== 2) return "jumping";
+  return resolveRestAnimation(runtime.lastActivityAt, now);
 }
 
 function paint(refs: OverlayRefs, runtime: AnimationRuntime, now = Date.now()): void {
@@ -72,13 +86,22 @@ function paint(refs: OverlayRefs, runtime: AnimationRuntime, now = Date.now()): 
     runtime.state = nextState;
     runtime.column = 0;
     runtime.lastFrameAt = now;
+    runtime.frameDurationMs = resolveAnimationFrameDurationMs(nextState);
   }
 
   const visibleColumns = runtime.visibleFrameColumns[resolveAnimationRow(runtime.state)] ?? [0];
   const actualColumn = visibleColumns[runtime.column % visibleColumns.length] ?? 0;
-  const position = resolveSpritePosition(runtime.state, actualColumn);
+  const looking =
+    runtime.version === 2 &&
+    runtime.hover &&
+    runtime.dragState === null &&
+    now > runtime.requestedUntil &&
+    resolveKeyboardAnimation(runtime.keyboard, now) === null;
+  const position = looking
+    ? resolveLookPosition(runtime.lookDirection)
+    : resolveSpritePosition(runtime.state, actualColumn, runtime.version);
   refs.sprite.style.backgroundPosition = `${position.x} ${position.y}`;
-  refs.sprite.setAttribute("data-animation-state", runtime.state);
+  refs.sprite.setAttribute("data-animation-state", looking ? "looking" : runtime.state);
 }
 
 function renderState(refs: OverlayRefs, runtime: AnimationRuntime, state: PetManagerState): void {
@@ -91,6 +114,8 @@ function renderState(refs: OverlayRefs, runtime: AnimationRuntime, state: PetMan
     return;
   }
 
+  runtime.version = pet.manifest.spriteVersionNumber ?? 1;
+  refs.sprite.style.backgroundSize = `800% ${resolveSpriteGrid(runtime.version).rows * 100}%`;
   refs.sprite.style.backgroundImage = `url("${pet.spriteUrl}")`;
   refs.sprite.setAttribute("aria-label", pet.manifest.displayName);
   if (runtime.spriteUrl === pet.spriteUrl) {
@@ -98,7 +123,10 @@ function renderState(refs: OverlayRefs, runtime: AnimationRuntime, state: PetMan
   }
 
   runtime.spriteUrl = pet.spriteUrl;
-  void detectVisibleFrameColumns(pet.spriteUrl).then((visibleFrameColumns) => {
+  runtime.keyboard = { lastKeyAt: null, greetingUntil: 0 };
+  runtime.visibleFrameColumns = createFallbackVisibleFrameColumns(runtime.version);
+  runtime.lastActivityAt = Date.now();
+  void detectVisibleFrameColumns(pet.spriteUrl, runtime.version).then((visibleFrameColumns) => {
     if (runtime.spriteUrl !== pet.spriteUrl) {
       return;
     }
@@ -115,8 +143,15 @@ function requestAnimation(
   state: PetAnimationState,
 ): void {
   const now = Date.now();
+  runtime.lastActivityAt = now;
   runtime.requestedState = state;
-  runtime.requestedUntil = now + animationTiming.requestedAnimationDurationMs;
+  const frameCount = runtime.visibleFrameColumns[resolveAnimationRow(state)]?.length ?? 1;
+  runtime.requestedUntil =
+    now +
+    Math.max(
+      animationTiming.requestedAnimationDurationMs,
+      frameCount * resolveAnimationFrameDurationMs(state),
+    );
   paint(refs, runtime, now);
 }
 
@@ -124,11 +159,12 @@ function bindAnimationTimers(refs: OverlayRefs, runtime: AnimationRuntime): void
   const tick = (): void => {
     const now = Date.now();
     const state = resolveRuntimeState(runtime, now);
-    const frameDurationMs = resolveAnimationFrameDurationMs(state);
+    const frameDurationMs = runtime.frameDurationMs;
     if (state === runtime.state && now - runtime.lastFrameAt >= frameDurationMs) {
       const visibleColumns = runtime.visibleFrameColumns[resolveAnimationRow(state)] ?? [0];
       runtime.column = (runtime.column + 1) % visibleColumns.length;
       runtime.lastFrameAt = now;
+      runtime.frameDurationMs = resolveAnimationFrameDurationMs(state);
     }
 
     paint(refs, runtime, now);
@@ -141,9 +177,24 @@ function bindAnimationTimers(refs: OverlayRefs, runtime: AnimationRuntime): void
 function bindHover(refs: OverlayRefs, runtime: AnimationRuntime): void {
   refs.shell.addEventListener("pointerenter", () => {
     runtime.hover = true;
+    runtime.lastActivityAt = Date.now();
     paint(refs, runtime);
   });
 
+  refs.shell.addEventListener("pointermove", (event) => {
+    runtime.lastActivityAt = Date.now();
+    runtime.lookDirection =
+      (Math.atan2(
+        event.clientX - window.innerWidth / 2,
+        -(event.clientY - window.innerHeight / 2),
+      ) *
+        180) /
+      Math.PI;
+  });
+  refs.shell.addEventListener("dblclick", (event) => {
+    if (event.target instanceof Element && event.target.closest("[data-resize-grip]")) return;
+    requestAnimation(refs, runtime, "jumping");
+  });
   refs.shell.addEventListener("pointerleave", () => {
     runtime.hover = false;
     paint(refs, runtime);
@@ -152,12 +203,14 @@ function bindHover(refs: OverlayRefs, runtime: AnimationRuntime): void {
 
 function bindDrag(refs: OverlayRefs, runtime: AnimationRuntime): void {
   let dragSession: DragSession | undefined;
+  let distance = 0;
 
   const stopDrag = (event: PointerEvent): void => {
     if (dragSession?.pointerId !== event.pointerId) {
       return;
     }
 
+    if (distance < 4 && event.type === "pointerup") requestAnimation(refs, runtime, "waving");
     dragSession = undefined;
     runtime.dragState = null;
     refs.shell.setAttribute("data-dragging", "false");
@@ -173,6 +226,7 @@ function bindDrag(refs: OverlayRefs, runtime: AnimationRuntime): void {
       return;
     }
 
+    distance = 0;
     event.preventDefault();
     refs.shell.setPointerCapture(event.pointerId);
     refs.shell.setAttribute("data-dragging", "true");
@@ -200,6 +254,8 @@ function bindDrag(refs: OverlayRefs, runtime: AnimationRuntime): void {
       return;
     }
 
+    distance += Math.abs(deltaX) + Math.abs(deltaY);
+    runtime.lastActivityAt = Date.now();
     runtime.dragState = resolveDragAnimationState(deltaX);
     void api.moveOverlay(deltaX, deltaY);
     paint(refs, runtime);
@@ -227,10 +283,12 @@ function bindResizeGrip(refs: OverlayRefs): void {
       refs.grip.setAttribute("data-resizing", "false");
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
     };
 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
   });
 }
 
@@ -249,7 +307,12 @@ export function renderOverlay(root: HTMLElement): void {
     grip: query(root, "[data-resize-grip]"),
   };
   const runtime: AnimationRuntime = {
+    keyboard: { lastKeyAt: null, greetingUntil: 0 },
     column: 0,
+    version: 1,
+    lookDirection: 0,
+    lastActivityAt: Date.now(),
+    frameDurationMs: resolveAnimationFrameDurationMs("idle"),
     dragState: null,
     hover: false,
     lastFrameAt: Date.now(),
@@ -260,12 +323,19 @@ export function renderOverlay(root: HTMLElement): void {
     visibleFrameColumns: createFallbackVisibleFrameColumns(),
   };
 
+  refs.grip.append(createElement(MoveDiagonal2, { width: 14, height: 14, "aria-hidden": "true" }));
   bindAnimationTimers(refs, runtime);
   bindHover(refs, runtime);
   bindDrag(refs, runtime);
   bindResizeGrip(refs);
   paint(refs, runtime);
 
+  api.onKeyboardActivity(() => {
+    const now = Date.now();
+    recordKeyboardActivity(runtime.keyboard, now);
+    runtime.lastActivityAt = now;
+    paint(refs, runtime, now);
+  });
   api.onAnimationRequested((state) => requestAnimation(refs, runtime, state));
   api.onStateChanged((state) => renderState(refs, runtime, state));
   void api.getState().then((result) => {

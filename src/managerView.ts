@@ -1,8 +1,11 @@
 import type { PetManagerState } from "../electron/shared/ipc.js";
+import { resolveSpriteGrid } from "../electron/shared/petAnimation.js";
 import type { UpdateCheckResult } from "../electron/shared/update.js";
 
 export type ManagerRefs = {
   readonly status: HTMLElement;
+  readonly versionInfo: HTMLElement;
+  readonly animations: HTMLElement;
   readonly input: HTMLInputElement | null;
   readonly addButton: HTMLButtonElement | null;
   readonly list: HTMLElement;
@@ -14,16 +17,16 @@ export type ManagerRefs = {
   readonly scale: HTMLInputElement;
   readonly scaleValue: HTMLElement;
   readonly installHelp: HTMLElement | null;
-  readonly installerStatus: HTMLElement;
   readonly homebrewCommand: HTMLElement | null;
   readonly nodeCommand: HTMLElement | null;
-  readonly openAccessibilitySettingsButton: HTMLButtonElement;
   readonly updateDownloadButton?: HTMLButtonElement;
   readonly updateStatus?: HTMLElement;
 };
 
 export type ManagerRuntime = {
   previewPetId: string | null;
+  busy: boolean;
+  state: PetManagerState | null;
   updateDownloadUrl: string | null;
 };
 
@@ -53,7 +56,8 @@ export function setStatus(refs: ManagerRefs, message: string): void {
   refs.status.textContent = message;
 }
 
-function setSpriteFrame(element: HTMLElement, spriteUrl: string): void {
+function setSpriteFrame(element: HTMLElement, spriteUrl: string, version = 1): void {
+  element.style.backgroundSize = `800% ${resolveSpriteGrid(version).rows * 100}%`;
   element.style.backgroundImage = `url("${spriteUrl}")`;
 }
 
@@ -68,15 +72,20 @@ export function renderPreview(
     refs.previewFrame.removeAttribute("aria-label");
     refs.previewName.textContent = "선택 없음";
     refs.previewDescription.textContent = "적용할 에셋을 추가하세요.";
-    refs.previewPath.textContent = "public/pets";
+    refs.previewPath.textContent = "";
+    refs.versionInfo.textContent = "v1: 기본 9개 동작 / v2: 9개 동작 + 16방향 시선";
     return;
   }
 
-  setSpriteFrame(refs.previewFrame, pet.spriteUrl);
+  setSpriteFrame(refs.previewFrame, pet.spriteUrl, pet.manifest.spriteVersionNumber);
   refs.previewFrame.setAttribute("aria-label", pet.manifest.displayName);
   refs.previewName.textContent = pet.manifest.displayName;
   refs.previewDescription.textContent = pet.manifest.description;
-  refs.previewPath.textContent = `public/pets/${pet.manifest.id}/${pet.manifest.spritesheetPath}`;
+  refs.previewPath.textContent = pet.manifest.id;
+  refs.versionInfo.textContent =
+    pet.manifest.spriteVersionNumber === 2
+      ? "v2 · 8×11 시트 · 기본 9개 동작 + 16방향 시선"
+      : "v1 · 8×9 시트 · 기본 9개 동작 (방향별 시선 없음)";
 }
 
 export function createPetCard(options: PetCardOptions): HTMLElement {
@@ -92,9 +101,12 @@ export function createPetCard(options: PetCardOptions): HTMLElement {
     card.setAttribute("data-previewing", "true");
   }
 
-  const preview = (): void => onPreview(pet.manifest.id);
+  const preview = (): void => {
+    if (!runtime.busy) onPreview(pet.manifest.id);
+  };
   card.addEventListener("click", preview);
   card.addEventListener("keydown", (event) => {
+    if (event.target !== card) return;
     if (event.key !== "Enter" && event.key !== " ") {
       return;
     }
@@ -107,13 +119,18 @@ export function createPetCard(options: PetCardOptions): HTMLElement {
   image.className = "sprite-frame card-sprite";
   image.setAttribute("role", "img");
   image.setAttribute("aria-label", pet.manifest.displayName);
-  setSpriteFrame(image, pet.spriteUrl);
+  setSpriteFrame(image, pet.spriteUrl, pet.manifest.spriteVersionNumber);
 
   const body = document.createElement("div");
   const name = document.createElement("h3");
   name.textContent = pet.manifest.displayName;
   const id = document.createElement("p");
   id.textContent = pet.manifest.id;
+  const version = document.createElement("span");
+  version.className = "version-badge";
+  version.textContent = `v${pet.manifest.spriteVersionNumber ?? 1}`;
+  version.title =
+    pet.manifest.spriteVersionNumber === 2 ? "9개 동작 + 16방향 시선" : "9개 기본 동작";
   const actions = document.createElement("div");
   actions.className = "asset-actions";
 
@@ -135,7 +152,7 @@ export function createPetCard(options: PetCardOptions): HTMLElement {
   });
 
   actions.append(applyButton, deleteButton);
-  body.append(name, id, actions);
+  body.append(name, version, id, actions);
   card.append(image, body);
   return card;
 }

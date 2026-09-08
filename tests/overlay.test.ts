@@ -8,7 +8,6 @@ import {
 import {
   animationTiming,
   defaultAnimationState,
-  keyboardAnimationState,
   resolveAnimationFrameDurationMs,
   resolveDragAnimationState,
   resolveSpritePosition,
@@ -71,9 +70,5 @@ describe("overlay sizing", () => {
   it("Given no explicit action When overlay needs a fallback Then idle is the only default state", () => {
     expect(defaultAnimationState).toBe("idle");
     expect("ambientDurationMs" in animationTiming).toBe(false);
-  });
-
-  it("Given keyboard input When animation is requested Then waving is used", () => {
-    expect(keyboardAnimationState).toBe("waving");
   });
 });

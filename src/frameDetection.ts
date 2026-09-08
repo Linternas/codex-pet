@@ -1,9 +1,9 @@
-import { spriteGrid } from "../electron/shared/petAnimation.js";
+import { resolveSpriteGrid, spriteGrid } from "../electron/shared/petAnimation.js";
 
 export type VisibleFrameColumns = readonly (readonly number[])[];
 
-export function createFallbackVisibleFrameColumns(): VisibleFrameColumns {
-  return Array.from({ length: spriteGrid.rows }, () => [0]);
+export function createFallbackVisibleFrameColumns(version = 1): VisibleFrameColumns {
+  return Array.from({ length: resolveSpriteGrid(version).rows }, () => [0]);
 }
 
 function loadImage(source: string): Promise<HTMLImageElement> {
@@ -13,6 +13,7 @@ function loadImage(source: string): Promise<HTMLImageElement> {
     image.addEventListener("error", () => reject(new Error(`Failed to load ${source}`)), {
       once: true,
     });
+    image.crossOrigin = "anonymous";
     image.src = source;
   });
 }
@@ -53,7 +54,10 @@ function detectColumnsForRow(
   return columns;
 }
 
-export async function detectVisibleFrameColumns(spriteUrl: string): Promise<VisibleFrameColumns> {
+export async function detectVisibleFrameColumns(
+  spriteUrl: string,
+  version = 1,
+): Promise<VisibleFrameColumns> {
   try {
     const image = await loadImage(spriteUrl);
     const canvas = document.createElement("canvas");
@@ -61,19 +65,19 @@ export async function detectVisibleFrameColumns(spriteUrl: string): Promise<Visi
     canvas.height = image.naturalHeight;
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (context === null) {
-      return createFallbackVisibleFrameColumns();
+      return createFallbackVisibleFrameColumns(version);
     }
 
     context.drawImage(image, 0, 0);
     const cellWidth = Math.floor(image.naturalWidth / spriteGrid.columns);
-    const cellHeight = Math.floor(image.naturalHeight / spriteGrid.rows);
+    const cellHeight = Math.floor(image.naturalHeight / resolveSpriteGrid(version).rows);
 
-    return Array.from({ length: spriteGrid.rows }, (_value, row) =>
+    return Array.from({ length: resolveSpriteGrid(version).rows }, (_value, row) =>
       detectColumnsForRow(context, row, cellWidth, cellHeight),
     );
   } catch (error) {
     if (error instanceof Error) {
-      return createFallbackVisibleFrameColumns();
+      return createFallbackVisibleFrameColumns(version);
     }
 
     throw error;

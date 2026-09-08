@@ -1,6 +1,24 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("codexPet", {
+  getAppUpdate: () => ipcRenderer.invoke("app-update:state"),
+  checkAppUpdate: () => ipcRenderer.invoke("app-update:check"),
+  downloadAppUpdate: () => ipcRenderer.invoke("app-update:download"),
+  installAppUpdate: () => ipcRenderer.invoke("app-update:install"),
+  onAppUpdate: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on("app-update:changed", listener);
+    return () => ipcRenderer.removeListener("app-update:changed", listener);
+  },
+  revealKeyboardMonitor: () => ipcRenderer.invoke("pet:reveal-keyboard-monitor"),
+  getReleaseHistory: () => ipcRenderer.invoke("pet:get-release-history"),
+  refreshInstaller: () => ipcRenderer.invoke("pet:refresh-installer"),
+  downloadNode: () => ipcRenderer.invoke("pet:download-node"),
+  getAccessibilityPermission: () => ipcRenderer.invoke("pet:get-accessibility-permission"),
+  openAccessibilitySettings: () => ipcRenderer.invoke("pet:open-accessibility-settings"),
+  checkForUpdate: () => ipcRenderer.invoke("pet:check-update"),
+  openUpdateDownload: (downloadUrl) =>
+    ipcRenderer.invoke("pet:open-update-download", { downloadUrl }),
   getState: () => ipcRenderer.invoke("pet:get-state"),
   installPet: (petId) => ipcRenderer.invoke("pet:install", { petId }),
   deletePet: (petId) => ipcRenderer.invoke("pet:delete", { petId }),
@@ -13,6 +31,11 @@ contextBridge.exposeInMainWorld("codexPet", {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on("pet:state-changed", listener);
     return () => ipcRenderer.removeListener("pet:state-changed", listener);
+  },
+  onKeyboardActivity: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("pet:keyboard-activity", listener);
+    return () => ipcRenderer.removeListener("pet:keyboard-activity", listener);
   },
   onAnimationRequested: (callback) => {
     const listener = (_event, state) => callback(state);

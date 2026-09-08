@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const projectRoot = process.cwd();
+const sparkleConfig = JSON.parse(readFileSync(join(projectRoot, "build/sparkle.json"), "utf8"));
 const { appMetadata, createDmgFileName, createReleaseManifest } = await import(
   pathToFileURL(join(projectRoot, "dist-electron", "electron", "shared", "release.js")).toString()
 );
@@ -93,6 +94,7 @@ setPlistValue(infoPlistPath, "CFBundleIdentifier", "app.mingu.codex-pet");
 setPlistValue(infoPlistPath, "CFBundleShortVersionString", appMetadata.version);
 setPlistValue(infoPlistPath, "CFBundleVersion", appMetadata.version);
 setPlistValue(infoPlistPath, "CFBundleIconFile", "Codex-Pet");
+run("/usr/libexec/PlistBuddy", ["-c", "Add :LSUIElement bool true", infoPlistPath]);
 
 if (existsSync(iconPath)) {
   cpSync(iconPath, join(appBundlePath, "Contents", "Resources", iconFileName), {
@@ -107,7 +109,20 @@ if (existsSync(runtimeIconPath)) {
 
 copyResource("dist");
 copyResource("dist-electron");
-copyResource("dist-native");
+copyAppBundle(join(projectRoot, "dist-native"), join(resourcesAppPath, "dist-native"));
+mkdirSync(join(appBundlePath, "Contents/Helpers"), { recursive: true });
+copyAppBundle(
+  join(projectRoot, "dist-native/Codex Pet Updater.app"),
+  join(appBundlePath, "Contents/Helpers/Codex Pet Updater.app"),
+);
+rmSync(join(resourcesAppPath, "dist-native/Codex Pet Updater.app"), {
+  recursive: true,
+  force: true,
+});
+cpSync(
+  join(projectRoot, "docs/licenses/Sparkle.txt"),
+  join(appBundlePath, "Contents/Resources/Sparkle-LICENSE.txt"),
+);
 copyResource("public");
 copyResource("electron-main.cjs");
 copyResource("electron-preload.cjs");
@@ -132,9 +147,25 @@ writeFileSync(
   )}\n`,
 );
 
+for (const [key, type, value] of [
+  ["SUFeedURL", "string", sparkleConfig.feedUrl],
+  ["SUPublicEDKey", "string", sparkleConfig.publicKey],
+  ["SUEnableAutomaticChecks", "bool", "false"],
+  ["SUAutomaticallyUpdate", "bool", "false"],
+  ["SUVerifyUpdateBeforeExtraction", "bool", "true"],
+  ["SURequireSignedFeed", "bool", "true"],
+])
+  run("/usr/libexec/PlistBuddy", ["-c", `Add :${key} ${type} ${value}`, infoPlistPath]);
+
 signAppBundle(appBundlePath);
 verifyAppBundle(appBundlePath);
 
+const zipPath = join(
+  releaseDir,
+  `Codex-Pet-v${appMetadata.version}-${process.platform}-${process.arch}.zip`,
+);
+run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appBundlePath, zipPath]);
+run(process.execPath, [join(projectRoot, "scripts/create-appcast.mjs"), zipPath]);
 copyAppBundle(appBundlePath, join(dmgRootPath, `${appMetadata.name}.app`));
 symlinkSync("/Applications", join(dmgRootPath, "Applications"));
 run("hdiutil", [

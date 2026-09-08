@@ -5,3 +5,4 @@ dist-native
 release
 coverage
 .DS_Store
+.cache

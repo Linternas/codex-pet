@@ -38,6 +38,25 @@ export function getPetApi(): PetApi {
   }
 
   return {
+    getAppUpdate: async () => ({
+      kind: "unavailable",
+      message: "설치한 앱에서 업데이트를 확인할 수 있습니다.",
+    }),
+    checkAppUpdate: async () => ({ kind: "unavailable" }),
+    downloadAppUpdate: async () => ({ kind: "unavailable" }),
+    installAppUpdate: async () => ({ kind: "unavailable" }),
+    onAppUpdate: () => () => undefined,
+    revealKeyboardMonitor: async () => {
+      throw new Error("키보드 도우미 찾기는 macOS 앱에서 사용할 수 있습니다.");
+    },
+    getReleaseHistory: async () => ({
+      kind: "error",
+      message: "버전 히스토리는 macOS 앱에서 확인하세요.",
+    }),
+    refreshInstaller: async () => ready(previewState),
+    downloadNode: async () => {
+      throw new Error("Node.js 자동 설치는 macOS 앱에서 실행하세요.");
+    },
     getState: async () => ready(previewState),
     installPet: async () => ready(previewState),
     deletePet: async () => ready(previewState),
@@ -46,6 +65,7 @@ export function getPetApi(): PetApi {
       kind: "not-configured",
       message: "CODEX_PET_UPDATE_MANIFEST_URL이 설정되지 않았습니다.",
     }),
+    getAccessibilityPermission: async () => null,
     openAccessibilitySettings: async () => undefined,
     openUpdateDownload: async () => undefined,
     setOverlayScale: async (scale: number) => {
@@ -59,6 +79,7 @@ export function getPetApi(): PetApi {
     moveOverlay: async () => undefined,
     requestAnimation: async () => undefined,
     onStateChanged: () => () => undefined,
+    onKeyboardActivity: () => () => undefined,
     onAnimationRequested: () => () => undefined,
   };
 }

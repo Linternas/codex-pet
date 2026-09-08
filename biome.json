@@ -23,6 +23,14 @@
     }
   },
   "files": {
-    "ignore": ["dist", "dist-electron", "dist-native", "release", "node_modules", "coverage"]
+    "ignore": [
+      "dist",
+      "dist-electron",
+      "dist-native",
+      "release",
+      "node_modules",
+      "coverage",
+      ".cache"
+    ]
   }
 }

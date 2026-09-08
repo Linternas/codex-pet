@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { z } from "zod";
+import { commandEnvironment } from "./commandEnvironment.js";
 
 export const nodeInstallInstructions = {
   homebrewInstallCommand:
@@ -40,14 +41,19 @@ function unavailableInstallerStatus(): InstallerStatus {
 
 const runCommand: CommandRunner = (command, args) =>
   new Promise((resolve, reject) => {
-    execFile(command, [...args], { encoding: "utf8", windowsHide: true }, (error, stdout) => {
-      if (error !== null) {
-        reject(error);
-        return;
-      }
+    execFile(
+      command,
+      [...args],
+      { encoding: "utf8", windowsHide: true, env: commandEnvironment(), timeout: 10_000 },
+      (error, stdout) => {
+        if (error !== null) {
+          reject(error);
+          return;
+        }
 
-      resolve({ stdout });
-    });
+        resolve({ stdout });
+      },
+    );
   });
 
 export async function resolveInstallerStatus(

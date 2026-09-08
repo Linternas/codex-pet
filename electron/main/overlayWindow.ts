@@ -17,6 +17,7 @@ export type OverlayWindowController = {
   readonly isVisible: () => boolean;
   readonly moveBy: (deltaX: number, deltaY: number) => void;
   readonly resize: (scale: number) => void;
+  readonly sendKeyboardActivity: () => void;
   readonly sendAnimation: (state: PetAnimationState) => void;
   readonly sendState: (state: PetManagerState) => void;
   readonly showInactive: () => void;
@@ -96,6 +97,9 @@ export function createOverlayWindowController({
     resize: (scale) => {
       const bounds = resolveOverlayBounds(scale);
       getWindow()?.setSize(bounds.width, bounds.height);
+    },
+    sendKeyboardActivity: () => {
+      getWindow()?.webContents.send(petChannels.keyboardActivity);
     },
     sendAnimation: (state) => {
       getWindow()?.webContents.send(petChannels.animationRequested, state);

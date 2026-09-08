@@ -12,15 +12,15 @@ describe("manager source", () => {
     const source = await readManagerSources();
 
     expect(source).not.toContain('value="guga"');
-    expect(source).toContain('placeholder="guga"');
+    expect(source).toContain('placeholder="frieren-full"');
   });
 
-  it("Given v0.0.1 manager When rendered Then v0.0.2 download and update UI stays commented", async () => {
+  it("Given manager When rendered Then Node installation refreshes status automatically", async () => {
     const source = await readManagerSources();
 
-    expect(source).toContain("v0.0.2");
-    expect(source).toContain("https://codex-pets.net");
-    expect(source).toContain("npx --yes codex-pets add");
+    expect(source).toContain("data-download-node");
+    expect(source).toContain("api.refreshInstaller()");
+    expect(source).not.toContain("data-refresh-installer");
     expect(source).not.toContain("updateCheckButton: query");
     expect(source).not.toContain("refs.updateCheckButton.addEventListener");
   });

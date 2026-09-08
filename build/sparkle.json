@@ -1,0 +1,7 @@
+{
+  "version": "2.9.6",
+  "sha256": "52bf9e88cdd972fc0c81501377a880e90d47031bd8ca5462488f843e2609e192",
+  "feedUrl": "https://github.com/Linternas/codex-pet/releases/latest/download/appcast.xml",
+  "publicKey": "6r0rBvaYbJQjf3DH6wRQ9k9CTwS2PbWCCw2GtQe66v0=",
+  "keychainAccount": "app.mingu.codex-pet"
+}

@@ -5,7 +5,12 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const DEFAULT_ICON_BASENAME = "Codex-Pet";
-const DEFAULT_ICON_SOURCES = ["image1.png", "image1.jpg"];
+const DEFAULT_ICON_SOURCES = [
+  "build/Codex-Pet-source.png",
+  "build/Codex-Pet.jpeg",
+  "image1.png",
+  "image1.jpg",
+];
 const DEFAULT_ICON_BASE_SIZES = [16, 32, 128, 256, 512];
 const PROJECT_ROOT = process.cwd();
 const NORMALIZED_ICON_FILE_NAME = "build-icon-source.png";

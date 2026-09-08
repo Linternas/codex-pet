@@ -64,11 +64,16 @@ export type OverlayAnimationRequest = z.infer<typeof overlayAnimationRequestSche
 
 export const petChannels = {
   getState: "pet:get-state",
+  revealKeyboardMonitor: "pet:reveal-keyboard-monitor",
+  getReleaseHistory: "pet:get-release-history",
+  refreshInstaller: "pet:refresh-installer",
+  downloadNode: "pet:download-node",
   install: "pet:install",
   delete: "pet:delete",
   apply: "pet:apply",
   checkUpdate: "pet:check-update",
   openAccessibilitySettings: "pet:open-accessibility-settings",
+  getAccessibilityPermission: "pet:get-accessibility-permission",
   openUpdateDownload: "pet:open-update-download",
   setOverlayScale: "pet:set-overlay-scale",
   resizeOverlay: "pet:resize-overlay",
@@ -76,4 +81,5 @@ export const petChannels = {
   requestAnimation: "pet:request-animation",
   stateChanged: "pet:state-changed",
   animationRequested: "pet:animation-requested",
+  keyboardActivity: "pet:keyboard-activity",
 } as const;

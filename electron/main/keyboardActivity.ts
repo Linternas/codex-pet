@@ -7,9 +7,8 @@ import {
   keyboardMonitorMessages,
   parseKeyboardMonitorMessages,
 } from "../shared/keyboardActivity.js";
-import { keyboardAnimationState } from "../shared/petAnimation.js";
 
-type KeyboardAnimationSender = (state: typeof keyboardAnimationState) => void;
+type KeyboardActivityListener = () => void;
 type KeyboardMonitorProcess = ChildProcessByStdio<null, Readable, Readable>;
 
 let activeMonitor: KeyboardMonitorProcess | undefined;
@@ -38,27 +37,24 @@ export function shouldRetryKeyboardMonitorAfterMessage(message: KeyboardMonitorM
   }
 }
 
-function schedulePermissionRetry(
-  projectRoot: string,
-  sendAnimation: KeyboardAnimationSender,
-): void {
+function schedulePermissionRetry(projectRoot: string, onActivity: KeyboardActivityListener): void {
   if (permissionRetryTimer !== undefined) {
     return;
   }
 
   permissionRetryTimer = setTimeout(() => {
     permissionRetryTimer = undefined;
-    startGlobalKeyboardActivity(projectRoot, sendAnimation);
+    startGlobalKeyboardActivity(projectRoot, onActivity);
   }, permissionRetryDelayMs);
 }
 
 function handleKeyboardMonitorMessage(
   message: KeyboardMonitorMessage,
-  sendAnimation: KeyboardAnimationSender,
+  onActivity: KeyboardActivityListener,
   projectRoot: string,
 ): void {
   if (shouldRetryKeyboardMonitorAfterMessage(message)) {
-    schedulePermissionRetry(projectRoot, sendAnimation);
+    schedulePermissionRetry(projectRoot, onActivity);
   }
 
   switch (message) {
@@ -66,7 +62,7 @@ function handleKeyboardMonitorMessage(
       clearPermissionRetry();
       return;
     case keyboardMonitorMessages.keyDown:
-      sendAnimation(keyboardAnimationState);
+      onActivity();
       return;
     case keyboardMonitorMessages.permissionRequired:
       console.warn(
@@ -103,7 +99,7 @@ export function resolveKeyboardMonitorPath(projectRoot: string): string {
 
 export function startGlobalKeyboardActivity(
   projectRoot: string,
-  sendAnimation: KeyboardAnimationSender,
+  onActivity: KeyboardActivityListener,
 ): void {
   stopGlobalKeyboardActivity();
   if (process.platform !== "darwin") {
@@ -133,7 +129,7 @@ export function startGlobalKeyboardActivity(
     const lines = bufferedOutput.split(/\r?\n/);
     bufferedOutput = lines.pop() ?? "";
     for (const message of parseKeyboardMonitorMessages(lines.join("\n"))) {
-      handleKeyboardMonitorMessage(message, sendAnimation, projectRoot);
+      handleKeyboardMonitorMessage(message, onActivity, projectRoot);
     }
   });
   monitor.stderr.setEncoding("utf8");
