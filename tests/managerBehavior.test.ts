@@ -218,7 +218,7 @@ describe("pet manager user flows", () => {
     };
     await render();
     expect(document.querySelectorAll("[data-animations] button")).toHaveLength(9);
-    expect(document.querySelector("[data-scale-icon] svg")).not.toBeNull();
+    expect(document.querySelector("[data-scale]")).toBeNull();
     const buttons = [...document.querySelectorAll<HTMLButtonElement>("[data-animations] button")];
     buttons.find((element) => element.textContent === "검토")?.click();
     expect(api.requestAnimation).toHaveBeenCalledWith("review");

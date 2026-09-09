@@ -1,5 +1,5 @@
 import { BookOpen, History, PawPrint, createElement } from "lucide";
-import currentReleaseNotes from "../docs/releases/v0.0.2.md?raw";
+import currentReleaseNotes from "../docs/releases/v0.0.3.md?raw";
 import { appMetadata, formatVersionTag } from "../electron/shared/release.js";
 import type { ReleaseHistoryEntry } from "../electron/shared/releaseHistory.js";
 import { mountAppUpdate } from "./appUpdateView.js";
@@ -157,7 +157,7 @@ export function mountManagerPages(root: HTMLElement): void {
     version: formatVersionTag(appMetadata.version),
     title: formatVersionTag(appMetadata.version),
     notes: currentReleaseNotes,
-    publishedAt: "2026-09-08T00:00:00Z",
+    publishedAt: "2026-09-09T00:00:00Z",
     prerelease: false,
   };
   historyList.append(createReleaseCard(currentRelease));

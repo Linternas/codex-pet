@@ -14,8 +14,6 @@ export type ManagerRefs = {
   readonly previewDescription: HTMLElement;
   readonly previewLabel: HTMLElement;
   readonly previewPath: HTMLElement;
-  readonly scale: HTMLInputElement;
-  readonly scaleValue: HTMLElement;
   readonly installHelp: HTMLElement | null;
   readonly homebrewCommand: HTMLElement | null;
   readonly nodeCommand: HTMLElement | null;

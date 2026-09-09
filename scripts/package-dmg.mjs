@@ -6,6 +6,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -87,8 +88,13 @@ mkdirSync(dmgRootPath, { recursive: true });
 
 copyAppBundle(join(projectRoot, "node_modules", "electron", "dist", "Electron.app"), appBundlePath);
 
+renameSync(
+  join(appBundlePath, "Contents/MacOS/Electron"),
+  join(appBundlePath, "Contents/MacOS", appMetadata.name),
+);
 const infoPlistPath = join(appBundlePath, "Contents", "Info.plist");
 setPlistValue(infoPlistPath, "CFBundleName", appMetadata.name);
+setPlistValue(infoPlistPath, "CFBundleExecutable", appMetadata.name);
 setPlistValue(infoPlistPath, "CFBundleDisplayName", appMetadata.name);
 setPlistValue(infoPlistPath, "CFBundleIdentifier", "app.mingu.codex-pet");
 setPlistValue(infoPlistPath, "CFBundleShortVersionString", appMetadata.version);

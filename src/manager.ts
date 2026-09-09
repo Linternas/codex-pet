@@ -1,4 +1,3 @@
-import { Scaling, createElement } from "lucide";
 import type { PetManagerResult, PetManagerState } from "../electron/shared/ipc.js";
 import {
   type PetAnimationState,
@@ -39,8 +38,6 @@ function renderState(refs: ManagerRefs, runtime: ManagerRuntime, state: PetManag
   runtime.state = state;
   for (const button of refs.animations.querySelectorAll<HTMLButtonElement>("button"))
     button.disabled = !state.overlay.visible || state.appliedPetId === null;
-  refs.scale.value = String(state.overlay.scale);
-  refs.scaleValue.textContent = `${Math.round(state.overlay.scale * 100)}%`;
 
   const appliedPet = state.pets.find((pet) => pet.manifest.id === state.appliedPetId);
   const previewPet = state.pets.find((pet) => pet.manifest.id === runtime.previewPetId);
@@ -127,11 +124,7 @@ export function renderManager(root: HTMLElement): void {
         </form>
 
         <div class="asset-list" data-asset-list></div>
-        <label class="scale-row">
-          <span data-scale-icon title="캐릭터 크기"></span>
-          <input aria-label="캐릭터 크기" data-scale type="range" min="0.45" max="1" step="0.05" value="0.65" />
-          <strong data-scale-value>65%</strong>
-        </label>
+
         <p class="status" data-status role="status" aria-live="polite">상태 확인 중</p>
       </section>
       <section class="preview-panel">
@@ -165,8 +158,6 @@ export function renderManager(root: HTMLElement): void {
     previewDescription: query(root, "[data-preview-description]"),
     previewLabel: query(root, "[data-preview-label]"),
     previewPath: query(root, "[data-preview-path]"),
-    scale: query(root, "[data-scale]"),
-    scaleValue: query(root, "[data-scale-value]"),
     installHelp: queryOptional(root, "[data-install-help]"),
     homebrewCommand: queryOptional(root, "[data-homebrew-command]"),
     nodeCommand: queryOptional(root, "[data-node-command]"),
@@ -178,9 +169,6 @@ export function renderManager(root: HTMLElement): void {
     updateDownloadUrl: null,
   };
 
-  query(root, "[data-scale-icon]").append(
-    createElement(Scaling, { width: 20, height: 20, "aria-hidden": "true" }),
-  );
   for (const animation of petAnimationStates) {
     const button = document.createElement("button");
     button.type = "button";
@@ -225,13 +213,6 @@ export function renderManager(root: HTMLElement): void {
       void runAction(refs, runtime, () => api.installPet(parsed.data), "다운로드 중…", true);
     });
   }
-
-  refs.scale.addEventListener("input", () => {
-    void api
-      .setOverlayScale(Number(refs.scale.value))
-      .then((result) => renderResult(refs, runtime, result))
-      .catch((error) => setStatus(refs, errorMessage(error)));
-  });
 
   api.onStateChanged((state) => renderState(refs, runtime, state));
   void api

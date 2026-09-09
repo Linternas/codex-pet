@@ -57,9 +57,10 @@ const codexPetApi = {
     ),
   checkForUpdate: async () =>
     updateCheckResultSchema.parse(await ipcRenderer.invoke(petChannels.checkUpdate)),
-  getAccessibilityPermission: async (): Promise<boolean> => {
+  getAccessibilityPermission: async (): Promise<boolean | null> => {
     const value: unknown = await ipcRenderer.invoke(petChannels.getAccessibilityPermission);
-    if (typeof value !== "boolean") throw new Error("Invalid accessibility permission state");
+    if (value !== null && typeof value !== "boolean")
+      throw new Error("Invalid accessibility permission state");
     return value;
   },
   openAccessibilitySettings: async () => {

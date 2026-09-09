@@ -47,4 +47,12 @@ else {
 CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
 CGEvent.tapEnable(tap: eventTap, enable: true)
 writeStdout(readyMessage)
+let permissionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
+  if AXIsProcessTrustedWithOptions(accessibilityOptions) {
+    writeStdout(readyMessage)
+  } else {
+    writeStdout(permissionRequiredMessage)
+    exit(2)
+  }
+}
 CFRunLoopRun()

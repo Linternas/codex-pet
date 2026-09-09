@@ -29,7 +29,11 @@ import {
 } from "../shared/petAssets.js";
 import { readPetPreferences, writePetPreferences } from "../shared/userPreferences.js";
 import { getInstallerStatus } from "./installerStatus.js";
-import { startGlobalKeyboardActivity, stopGlobalKeyboardActivity } from "./keyboardActivity.js";
+import {
+  getKeyboardPermission,
+  startGlobalKeyboardActivity,
+  stopGlobalKeyboardActivity,
+} from "./keyboardActivity.js";
 import { installNodeRuntime } from "./nodeRuntimeInstaller.js";
 import { createOverlayWindowController } from "./overlayWindow.js";
 import { registerPetIpcHandlers } from "./petIpc.js";
@@ -41,19 +45,8 @@ import { registerUpdateIpcHandlers } from "./updateIpc.js";
 
 const require = createRequire(import.meta.url);
 const electron: typeof electronType = require("electron");
-const {
-  BrowserWindow,
-  Menu,
-  Tray,
-  app,
-  dialog,
-  ipcMain,
-  nativeImage,
-  shell,
-  protocol,
-  net,
-  systemPreferences,
-} = electron;
+const { BrowserWindow, Menu, Tray, app, dialog, ipcMain, nativeImage, shell, protocol, net } =
+  electron;
 const projectRoot = process.cwd();
 const assetOptions = () => ({
   homeDir: homedir(),
@@ -63,6 +56,8 @@ const assetOptions = () => ({
 let cachedPets: readonly PetView[] | undefined;
 const preloadPath = join(projectRoot, "electron-preload.cjs");
 let mainWindow: InstanceType<typeof BrowserWindow> | undefined;
+let nodeInstallRequest: Promise<boolean> | undefined;
+let nodeConfirmationOpen = false;
 let statusTray: StatusTray | undefined;
 let appliedPetId: string | null = null;
 let overlayScale: number = overlayDefaults.defaultScale;
@@ -134,6 +129,15 @@ async function createWindow(): Promise<void> {
     return { action: "deny" };
   });
 
+  // Keep no background settings window for macOS app activation to raise.
+  // Native installation sheets must remain attached until the user dismisses them.
+  mainWindow.on("blur", () => {
+    const window = mainWindow;
+    setTimeout(() => {
+      if (window && !window.isDestroyed() && !window.isFocused() && !nodeConfirmationOpen)
+        window.hide();
+    }, 100);
+  });
   mainWindow.on("closed", () => {
     mainWindow = undefined;
   });
@@ -146,10 +150,10 @@ function focusMainWindow(): void {
     return;
   }
 
+  app.focus({ steal: true });
   mainWindow.show();
   mainWindow.moveTop();
   mainWindow.focus();
-  app.focus({ steal: true });
   if (process.platform === "darwin") app.dock?.hide();
 }
 
@@ -318,9 +322,7 @@ if (process.platform !== "darwin") {
   app.setActivationPolicy("accessory");
   app.dock?.hide();
   ipcMain.handle(petChannels.openAccessibilitySettings, openAccessibilitySettings);
-  ipcMain.handle(petChannels.getAccessibilityPermission, () =>
-    systemPreferences.isTrustedAccessibilityClient(false),
-  );
+  ipcMain.handle(petChannels.getAccessibilityPermission, () => getKeyboardPermission());
   ipcMain.handle(petChannels.getReleaseHistory, () =>
     getReleaseHistory((url, options) => net.fetch(url, options)),
   );
@@ -333,7 +335,6 @@ if (process.platform !== "darwin") {
     }
     shell.showItemInFolder(helperPath);
   });
-  let nodeInstallRequest: Promise<boolean> | undefined;
   ipcMain.handle(petChannels.downloadNode, () => {
     nodeInstallRequest ??= (async () => {
       const options: electronType.MessageBoxOptions = {
@@ -347,9 +348,13 @@ if (process.platform !== "darwin") {
         cancelId: 0,
         noLink: true,
       };
+      nodeConfirmationOpen = true;
       const { response } = await (mainWindow && !mainWindow.isDestroyed()
         ? dialog.showMessageBox(mainWindow, options)
-        : dialog.showMessageBox(options));
+        : dialog.showMessageBox(options)
+      ).finally(() => {
+        nodeConfirmationOpen = false;
+      });
       if (response !== 1) return false;
       await installNodeRuntime();
       return true;
@@ -363,10 +368,6 @@ if (process.platform !== "darwin") {
     mainWindow?.webContents.send(appUpdateChannels.changed, state);
   });
   await startApp();
-
-  app.on("browser-window-focus", () => {
-    startKeyboardMonitor();
-  });
 }
 
 app.on("window-all-closed", () => {

@@ -11,6 +11,11 @@ import {
 type KeyboardActivityListener = () => void;
 type KeyboardMonitorProcess = ChildProcessByStdio<null, Readable, Readable>;
 
+let keyboardPermission: boolean | null = null;
+export function getKeyboardPermission(): boolean | null {
+  return keyboardPermission;
+}
+
 let activeMonitor: KeyboardMonitorProcess | undefined;
 let permissionRetryTimer: ReturnType<typeof setTimeout> | undefined;
 const permissionRetryDelayMs = 2500;
@@ -59,17 +64,20 @@ function handleKeyboardMonitorMessage(
 
   switch (message) {
     case keyboardMonitorMessages.ready:
+      keyboardPermission = true;
       clearPermissionRetry();
       return;
     case keyboardMonitorMessages.keyDown:
       onActivity();
       return;
     case keyboardMonitorMessages.permissionRequired:
+      keyboardPermission = false;
       console.warn(
         "Codex Pet needs macOS Accessibility permission for Codex Pet Keyboard Monitor.",
       );
       return;
     case keyboardMonitorMessages.tapUnavailable:
+      keyboardPermission = null;
       console.warn("Codex Pet could not create the macOS keyboard event tap.");
       return;
     default:
@@ -120,6 +128,7 @@ export function startGlobalKeyboardActivity(
   activeMonitor = monitor;
   monitor.on("close", () => {
     if (activeMonitor === monitor) {
+      if (keyboardPermission === true) keyboardPermission = null;
       activeMonitor = undefined;
     }
   });

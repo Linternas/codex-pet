@@ -55,6 +55,7 @@ export function createOverlayWindowController({
       overlayWindow = new BrowserWindow({
         width: bounds.width,
         height: bounds.height,
+        show: false,
         frame: false,
         transparent: true,
         resizable: true,
