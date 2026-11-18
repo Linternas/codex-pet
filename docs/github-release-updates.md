@@ -20,13 +20,13 @@
 - `electron/main/sparkleUpdater.ts`: 도우미 실행, 검증된 JSON 상태, IPC, 시간 초과 처리.
 - `src/appUpdateView.ts`: 헤더 알림과 다운로드·설치 버튼.
 - 앱의 `Contents/Helpers`에 도우미와 Sparkle.framework를 포함합니다.
-- 앱은 기존 ad-hoc 서명을 유지합니다. Sparkle Ed25519 서명은 Apple Developer ID 서명과 다릅니다.
+- 앱은 ad-hoc 방식으로 서명합니다. Sparkle Ed25519 키는 업데이트 ZIP과 feed의 서명에 사용합니다.
 - 자동 다운로드는 끄고, 서명된 feed와 압축 해제 전 업데이트 검증을 요구합니다.
 
 ## 릴리스 만들기
 
 현재 배포 대상은 macOS ARM64입니다. 배포 머신의 로그인 Keychain에
-`app.mingu.codex-pet` 계정의 Sparkle 개인키가 있어야 합니다. 이번 작업에서 생성했습니다.
+`app.mingu.codex-pet` 계정의 Sparkle 개인키가 있어야 합니다.
 개인키는 저장소 또는 앱에 포함하지 않습니다. 기존 키가 있는 환경에서 새 키를 생성하지 마세요.
 다른 배포 머신은 기존 키를 안전하게 이전해야 합니다.
 
@@ -44,8 +44,8 @@
 기존 latest-darwin-arm64.json도 호환을 위해 생성하지만 Sparkle은 읽지 않습니다.
 아이콘은 투명 배경의 build/Codex-Pet-source.png에서 생성합니다.
 
-이 작업에서는 GitHub Release를 게시하지 않았습니다. 이전 앱에는 Sparkle이 없으므로
-최초 Sparkle 포함 버전은 수동 설치해야 합니다.
+v0.0.3에서 v0.0.4로 업데이트한 뒤 macOS가 손쉬운 사용 권한을 거부한 사례가 있습니다.
+업데이트로 ad-hoc 서명이 바뀌면 손쉬운 사용 권한을 다시 허용해야 할 수 있습니다.
 
 ## 검증과 한계
 
@@ -56,8 +56,6 @@
 - 앱 번들 외부 userData의 펫·설정 저장 방식을 유지합니다.
 - 실제 GitHub 업로드 후 설치본 간 업데이트, 브라우저 quarantine이 붙은 최초 설치,
   Gatekeeper 재확인 여부와 접근성 권한 유지 여부는 아직 검증하지 않았습니다.
-- Sparkle은 macOS 보안 승인을 대체하지 않습니다. Apple 인증서 없이 향후 모든 업데이트에서
-  보안 승인이 정확히 한 번만 필요하다고 보장하지 않습니다.
 
 ## 공식 자료
 
