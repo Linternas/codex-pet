@@ -1,5 +1,5 @@
 import { BookOpen, History, PawPrint, Terminal, createElement } from "lucide";
-import currentReleaseNotes from "../docs/releases/v0.0.6.md?raw";
+import currentReleaseNotes from "../docs/releases/v0.0.7.md?raw";
 import { appMetadata, formatVersionTag } from "../electron/shared/release.js";
 import type { ReleaseHistoryEntry } from "../electron/shared/releaseHistory.js";
 import { mountAgentSessionsPage } from "./agentSessionsView.js";
@@ -57,9 +57,9 @@ export function mountManagerPages(root: HTMLElement): void {
     ["permissions", BookOpen],
     ["history", History],
   ] as const) {
-    query(navigation, `[data-page="${page}"]`).prepend(
-      createElement(icon, { width: 16, height: 16, "aria-hidden": "true" }),
-    );
+    const button = query(navigation, `[data-page="${page}"]`);
+    button.prepend(createElement(icon, { width: 16, height: 16, "aria-hidden": "true" }));
+    button.addEventListener("click", () => showPage(page));
   }
   root.prepend(navigation);
   const permissionButton = query<HTMLButtonElement>(navigation, '[data-page="permissions"]');
@@ -227,9 +227,6 @@ export function mountManagerPages(root: HTMLElement): void {
       heading.tabIndex = -1;
       heading.focus();
     }
-  }
-  for (const page of ["pets", "permissions", "history"] as const) {
-    query(navigation, `[data-page="${page}"]`).addEventListener("click", () => showPage(page));
   }
   refreshButton.addEventListener("click", () => {
     void loadHistory();

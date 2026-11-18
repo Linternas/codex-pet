@@ -27,8 +27,14 @@ button {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.78);
   color: #241f1b;
-  cursor: pointer;
   font-weight: 800;
+}
+
+button,
+[role="button"],
+.auto-walk-setting input:enabled,
+.auto-walk-setting:has(input:enabled) {
+  cursor: pointer;
 }
 
 button:disabled {

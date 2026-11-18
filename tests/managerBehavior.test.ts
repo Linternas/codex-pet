@@ -252,6 +252,26 @@ describe("pet manager user flows", () => {
 });
 
 describe("onboarding and history pages", () => {
+  it("opens the work sessions page from its navigation tab", async () => {
+    await render();
+    const sessionsPage = document.querySelector<HTMLElement>("#page-sessions");
+    const sessionsTab = button('[data-page="sessions"]');
+    expect(sessionsPage?.hidden).toBe(true);
+
+    sessionsTab.click();
+
+    expect(sessionsPage?.hidden).toBe(false);
+    expect(document.querySelector<HTMLElement>("#page-permissions")?.hidden).toBe(true);
+    expect(sessionsTab.getAttribute("aria-current")).toBe("page");
+    expect(document.activeElement?.id).toBe("sessions-heading");
+    button("[data-connect=codex]").click();
+    expect(api.configureAgentHooks).toHaveBeenCalledWith("codex", true);
+    await settle();
+
+    button('[data-page="pets"]').click();
+    expect(sessionsPage?.hidden).toBe(true);
+  });
+
   it("shows the guide on first use, persists dismissal and lets users reopen it", async () => {
     await render();
     expect(document.querySelector<HTMLElement>("#page-permissions")?.hidden).toBe(false);
