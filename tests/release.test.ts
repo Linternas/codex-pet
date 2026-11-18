@@ -10,13 +10,13 @@ import {
 } from "../electron/shared/release.js";
 
 describe("release metadata", () => {
-  it("Given package metadata When checked Then the app version is v0.0.4", async () => {
+  it("Given package metadata When checked Then the app version is v0.0.5", async () => {
     const packageJson = JSON.parse(
       await readFile(new URL("../package.json", import.meta.url), "utf8"),
     );
 
     expect(packageJson.version).toBe(appMetadata.version);
-    expect(formatVersionTag(appMetadata.version)).toBe("v0.0.4");
+    expect(formatVersionTag(appMetadata.version)).toBe("v0.0.5");
   });
 
   it("Given release coordinates When creating a DMG file name Then it includes version platform and arch", () => {
@@ -44,7 +44,7 @@ describe("release metadata", () => {
 
   it("Given current app version When checking release manifest Then newer versions are detected", () => {
     const manifest = createReleaseManifest({
-      version: "0.0.5",
+      version: "0.0.6",
       platform: "darwin",
       arch: "arm64",
       sha256: "b".repeat(64),
