@@ -1,12 +1,13 @@
-import { BookOpen, History, PawPrint, createElement } from "lucide";
+import { BookOpen, History, PawPrint, Terminal, createElement } from "lucide";
 import currentReleaseNotes from "../docs/releases/v0.0.4.md?raw";
 import { appMetadata, formatVersionTag } from "../electron/shared/release.js";
 import type { ReleaseHistoryEntry } from "../electron/shared/releaseHistory.js";
+import { mountAgentSessionsPage } from "./agentSessionsView.js";
 import { mountAppUpdate } from "./appUpdateView.js";
 import { getPetApi } from "./petApi.js";
 
 export const permissionGuideSeenKey = "codex-pet:permission-guide-seen:v1";
-type ManagerPage = "pets" | "permissions" | "history";
+type ManagerPage = "pets" | "permissions" | "history" | "sessions";
 
 function hasSeenGuide(): boolean {
   try {
@@ -45,12 +46,14 @@ export function mountManagerPages(root: HTMLElement): void {
       <a href="https://codex-pets.net" target="_blank" rel="noreferrer">codex-pets.net에서 캐릭터 찾기</a>
     </div>
     <button type="button" data-page="pets" aria-controls="page-pets">캐릭터</button>
+    <button type="button" data-page="sessions" aria-controls="page-sessions">작업 세션</button>
     <button type="button" data-page="permissions" aria-controls="page-permissions">권한 설정</button>
     <button type="button" data-page="history" aria-controls="page-history">버전 히스토리</button>
     <button type="button" class="node-install-button" data-install-help data-download-node title="Node.js와 npx 자동 설치" hidden>npx 설치</button>
   `;
   for (const [page, icon] of [
     ["pets", PawPrint],
+    ["sessions", Terminal],
     ["permissions", BookOpen],
     ["history", History],
   ] as const) {
@@ -148,7 +151,8 @@ export function mountManagerPages(root: HTMLElement): void {
       <div class="release-history" data-release-history></div>
     </div>
   `;
-  root.append(permissionsPage, historyPage);
+  const sessionsPage = mountAgentSessionsPage(api);
+  root.append(permissionsPage, historyPage, sessionsPage);
   const guideFeedback = query<HTMLElement>(permissionsPage, "[data-guide-feedback]");
   const historyFeedback = query<HTMLElement>(historyPage, "[data-history-feedback]");
   const historyList = query<HTMLElement>(historyPage, "[data-release-history]");
@@ -201,6 +205,7 @@ export function mountManagerPages(root: HTMLElement): void {
     petsPage.hidden = page !== "pets";
     permissionsPage.hidden = page !== "permissions";
     historyPage.hidden = page !== "history";
+    sessionsPage.hidden = page !== "sessions";
     for (const button of navigation.querySelectorAll<HTMLButtonElement>("[data-page]")) {
       if (button.getAttribute("data-page") === page) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
@@ -211,7 +216,14 @@ export function mountManagerPages(root: HTMLElement): void {
       const heading =
         page === "pets"
           ? petsPage
-          : query<HTMLElement>(page === "permissions" ? permissionsPage : historyPage, "h2");
+          : query<HTMLElement>(
+              page === "permissions"
+                ? permissionsPage
+                : page === "sessions"
+                  ? sessionsPage
+                  : historyPage,
+              "h2",
+            );
       heading.tabIndex = -1;
       heading.focus();
     }

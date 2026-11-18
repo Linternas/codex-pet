@@ -37,7 +37,7 @@ beforeEach(() => {
   state = {
     pets: [],
     appliedPetId: null,
-    overlay: { visible: false, scale: 0.65, autoWalk: false },
+    overlay: { visible: false, scale: 0.65, autoWalk: false, clickThrough: false },
     installer: { npxAvailable: true, npxVersion: "10.0.0", instructions: null },
   };
   api = {
@@ -83,6 +83,9 @@ beforeEach(() => {
       return { kind: "ready", state };
     }),
     stepAutoWalk: vi.fn(async () => false),
+    getAgentSessions: vi.fn(async () => []),
+    onAgentSessions: vi.fn(() => () => undefined),
+    configureAgentHooks: vi.fn(async () => undefined),
     moveOverlay: vi.fn(async () => undefined),
     getAccessibilityPermission: vi.fn(async () => true),
     openAccessibilitySettings: vi.fn(async () => undefined),
@@ -235,7 +238,7 @@ describe("pet manager user flows", () => {
       ...state,
       pets: [pet],
       appliedPetId: pet.manifest.id,
-      overlay: { visible: true, scale: 0.65, autoWalk: false },
+      overlay: { visible: true, scale: 0.65, autoWalk: false, clickThrough: false },
     };
     await render();
     expect(document.querySelectorAll("[data-animations] button")).toHaveLength(9);

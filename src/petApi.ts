@@ -20,6 +20,7 @@ const previewState: PetManagerState = {
   overlay: {
     visible: true,
     autoWalk: false,
+    clickThrough: false,
     scale: overlayDefaults.defaultScale,
   },
   installer: {
@@ -39,6 +40,11 @@ export function getPetApi(): PetApi {
   }
 
   return {
+    getAgentSessions: async () => [],
+    configureAgentHooks: async () => {
+      throw new Error("macOS 앱에서 세션을 연결하세요.");
+    },
+    onAgentSessions: () => () => undefined,
     getAppUpdate: async () => ({
       kind: "unavailable",
       message: "설치한 앱에서 업데이트를 확인할 수 있습니다.",

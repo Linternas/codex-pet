@@ -1,19 +1,33 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
+import { overlayDefaults } from "./overlay.js";
 import { petIdSchema } from "./petAssets.js";
 
 export const petPreferencesSchema = z.object({
   appliedPetId: petIdSchema.nullable(),
   autoWalk: z.boolean().default(false),
+  clickThrough: z.boolean().default(false).catch(false),
+  agentProviders: z
+    .object({ codex: z.boolean(), claude: z.boolean() })
+    .default({ codex: false, claude: false })
+    .catch({ codex: false, claude: false }),
+  overlayScale: z
+    .number()
+    .min(overlayDefaults.minScale)
+    .max(overlayDefaults.maxScale)
+    .default(overlayDefaults.defaultScale)
+    .catch(overlayDefaults.defaultScale),
+  overlayPosition: z
+    .object({ x: z.number().int().safe(), y: z.number().int().safe() })
+    .optional()
+    .catch(undefined),
 });
 
 export type PetPreferences = z.infer<typeof petPreferencesSchema>;
 
-const defaultPetPreferences = {
-  appliedPetId: null,
-  autoWalk: false,
-} as const satisfies PetPreferences;
+export const defaultPetPreferences = petPreferencesSchema.parse({ appliedPetId: null });
 
 export function resolvePetPreferencesPath(userDataDir: string): string {
   return join(userDataDir, "pet-preferences.json");
@@ -30,7 +44,7 @@ export async function readPetPreferences(userDataDir: string): Promise<PetPrefer
     return petPreferencesSchema.parse(parsedJson);
   } catch (error) {
     if (isMissingFileError(error) || error instanceof SyntaxError || error instanceof z.ZodError) {
-      return defaultPetPreferences;
+      return { ...defaultPetPreferences };
     }
 
     throw error;
@@ -45,5 +59,11 @@ export async function writePetPreferences(
   const parsedPreferences = petPreferencesSchema.parse(preferences);
 
   await mkdir(dirname(preferencesPath), { recursive: true });
-  await writeFile(preferencesPath, `${JSON.stringify(parsedPreferences, null, 2)}\n`, "utf8");
+  const temporary = `${preferencesPath}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, `${JSON.stringify(parsedPreferences, null, 2)}\n`, "utf8");
+    await rename(temporary, preferencesPath);
+  } finally {
+    await rm(temporary, { force: true }).catch(() => undefined);
+  }
 }

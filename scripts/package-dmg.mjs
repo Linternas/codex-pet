@@ -132,6 +132,7 @@ cpSync(
 copyResource("public");
 copyResource("electron-main.cjs");
 copyResource("electron-preload.cjs");
+copyResource("scripts/session-hook.cjs");
 mkdirSync(join(resourcesAppPath, "node_modules"), { recursive: true });
 cpSync(join(projectRoot, "node_modules", "zod"), join(resourcesAppPath, "node_modules", "zod"), {
   dereference: true,

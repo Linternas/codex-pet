@@ -1,4 +1,5 @@
 import { MoveDiagonal2, createElement } from "lucide";
+import type { AgentSession } from "../electron/shared/agentSessions.js";
 import type { AutoWalkDirection, PetManagerState } from "../electron/shared/ipc.js";
 import {
   type KeyboardAnimationActivity,
@@ -40,6 +41,8 @@ type DragSession = {
 
 type AnimationRuntime = {
   autoWalk: boolean;
+  clickThrough: boolean;
+  agentState: "review" | "running" | null;
   walkState: AutoWalkDirection | null;
   keyboard: KeyboardAnimationActivity;
   column: number;
@@ -75,6 +78,8 @@ function resolveRuntimeState(runtime: AnimationRuntime, now: number): PetAnimati
     return runtime.requestedState;
   }
 
+  if (runtime.agentState !== null) return runtime.agentState;
+
   const keyboardState = resolveKeyboardAnimation(runtime.keyboard, now);
   if (keyboardState !== null) return keyboardState;
 
@@ -97,6 +102,7 @@ function paint(refs: OverlayRefs, runtime: AnimationRuntime, now = Date.now()): 
     runtime.version === 2 &&
     runtime.hover &&
     runtime.dragState === null &&
+    runtime.agentState === null &&
     now > runtime.requestedUntil &&
     resolveKeyboardAnimation(runtime.keyboard, now) === null;
   const position = looking
@@ -108,6 +114,8 @@ function paint(refs: OverlayRefs, runtime: AnimationRuntime, now = Date.now()): 
 
 function renderState(refs: OverlayRefs, runtime: AnimationRuntime, state: PetManagerState): void {
   runtime.autoWalk = state.overlay.autoWalk;
+  runtime.clickThrough = state.overlay.clickThrough;
+  if (runtime.clickThrough) runtime.hover = false;
   if (!runtime.autoWalk) runtime.walkState = null;
   const pet = state.pets.find((candidate) => candidate.manifest.id === state.appliedPetId);
   if (pet === undefined) {
@@ -173,6 +181,7 @@ function bindAnimationTimers(refs: OverlayRefs, runtime: AnimationRuntime): void
   function canWalk(now: number): boolean {
     return (
       runtime.autoWalk &&
+      runtime.agentState === null &&
       runtime.spriteUrl !== null &&
       !document.hidden &&
       !runtime.hover &&
@@ -239,6 +248,7 @@ function bindAnimationTimers(refs: OverlayRefs, runtime: AnimationRuntime): void
 
 function bindHover(refs: OverlayRefs, runtime: AnimationRuntime): void {
   refs.shell.addEventListener("pointerenter", () => {
+    if (runtime.clickThrough) return;
     runtime.hover = true;
     runtime.lastActivityAt = Date.now();
     paint(refs, runtime);
@@ -371,6 +381,8 @@ export function renderOverlay(root: HTMLElement): void {
   };
   const runtime: AnimationRuntime = {
     autoWalk: false,
+    clickThrough: false,
+    agentState: null,
     walkState: null,
     keyboard: { lastKeyAt: null, greetingUntil: 0 },
     column: 0,
@@ -394,6 +406,40 @@ export function renderOverlay(root: HTMLElement): void {
   bindDrag(refs, runtime);
   bindResizeGrip(refs);
   paint(refs, runtime);
+
+  let lastSession: AgentSession | undefined;
+  const renderSessions = (sessions: readonly AgentSession[], animate: boolean): void => {
+    runtime.agentState = sessions.some((session) => session.status === "waiting")
+      ? "review"
+      : sessions.some((session) => session.status === "working")
+        ? "running"
+        : null;
+    const latest = sessions[0];
+    if (
+      animate &&
+      latest &&
+      (latest.updatedAt !== lastSession?.updatedAt ||
+        latest.provider !== lastSession?.provider ||
+        latest.sessionId !== lastSession?.sessionId ||
+        latest.status !== lastSession?.status)
+    ) {
+      if (latest.status === "completed") requestAnimation(refs, runtime, "jumping");
+      if (latest.status === "failed") requestAnimation(refs, runtime, "failed");
+    }
+    lastSession = latest;
+    paint(refs, runtime);
+  };
+  let receivedSessionEvent = false;
+  api.onAgentSessions((sessions) => {
+    receivedSessionEvent = true;
+    renderSessions(sessions, true);
+  });
+  void api
+    .getAgentSessions()
+    .then((sessions) => {
+      if (!receivedSessionEvent) renderSessions(sessions, false);
+    })
+    .catch(() => undefined);
 
   api.onKeyboardActivity(() => {
     const now = Date.now();

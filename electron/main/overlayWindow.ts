@@ -1,8 +1,14 @@
 import { createRequire } from "node:module";
 import type electronType from "electron";
+import { type AgentSession, agentSessionChannels } from "../shared/agentSessions.js";
 import type { AutoWalkDirection, PetManagerState } from "../shared/ipc.js";
 import { petChannels } from "../shared/ipc.js";
-import { resolveAutoWalkX, resolveOverlayBounds } from "../shared/overlay.js";
+import {
+  type OverlayPosition,
+  clampOverlayPosition,
+  resolveAutoWalkX,
+  resolveOverlayBounds,
+} from "../shared/overlay.js";
 import type { PetAnimationState } from "../shared/petAnimation.js";
 import { resolveRendererUrl } from "./rendererUrl.js";
 
@@ -12,15 +18,22 @@ const { BrowserWindow, screen } = electron;
 
 export type OverlayWindowController = {
   readonly close: () => void;
-  readonly ensure: (scale: number, devServerUrl: string | undefined) => Promise<void>;
+  readonly ensure: (
+    scale: number,
+    position: OverlayPosition | undefined,
+    devServerUrl: string | undefined,
+  ) => Promise<void>;
+  readonly keepOnScreen: () => void;
+  readonly setClickThrough: (enabled: boolean) => void;
   readonly hide: () => void;
   readonly isVisible: () => boolean;
-  readonly moveBy: (deltaX: number, deltaY: number) => void;
+  readonly moveBy: (deltaX: number, deltaY: number) => OverlayPosition | undefined;
   readonly stepAutoWalk: (
     sender: electronType.WebContents,
     direction: AutoWalkDirection,
   ) => boolean;
   readonly resize: (scale: number) => void;
+  readonly sendAgentSessions: (sessions: readonly AgentSession[]) => void;
   readonly sendKeyboardActivity: () => void;
   readonly sendAnimation: (state: PetAnimationState) => void;
   readonly sendState: (state: PetManagerState) => void;
@@ -46,17 +59,32 @@ export function createOverlayWindowController({
     return overlayWindow;
   }
 
+  function keepOnScreen(): void {
+    const window = getWindow();
+    if (!window) return;
+    const bounds = window.getBounds();
+    const { x, y } = clampOverlayPosition(bounds, screen.getDisplayMatching(bounds).workArea);
+    if (x !== bounds.x || y !== bounds.y) window.setPosition(x, y);
+  }
+
   return {
+    keepOnScreen,
+    setClickThrough: (enabled) => {
+      getWindow()?.setIgnoreMouseEvents(enabled);
+    },
     close: () => {
       getWindow()?.close();
     },
-    ensure: async (scale, devServerUrl) => {
+    ensure: async (scale, position, devServerUrl) => {
       if (getWindow() !== undefined) {
         return;
       }
 
       const bounds = resolveOverlayBounds(scale);
+      const requested = position && { ...bounds, ...position };
       overlayWindow = new BrowserWindow({
+        ...(requested &&
+          clampOverlayPosition(requested, screen.getDisplayMatching(requested).workArea)),
         width: bounds.width,
         height: bounds.height,
         show: false,
@@ -98,6 +126,8 @@ export function createOverlayWindowController({
       const x = position[0] ?? 0;
       const y = position[1] ?? 0;
       window.setPosition(Math.round(x + deltaX), Math.round(y + deltaY), false);
+      const { x: actualX, y: actualY } = window.getBounds();
+      return { x: actualX, y: actualY };
     },
     stepAutoWalk: (sender, direction) => {
       const window = getWindow();
@@ -113,6 +143,10 @@ export function createOverlayWindowController({
     resize: (scale) => {
       const bounds = resolveOverlayBounds(scale);
       getWindow()?.setSize(bounds.width, bounds.height);
+      keepOnScreen();
+    },
+    sendAgentSessions: (sessions) => {
+      getWindow()?.webContents.send(agentSessionChannels.changed, sessions);
     },
     sendKeyboardActivity: () => {
       getWindow()?.webContents.send(petChannels.keyboardActivity);

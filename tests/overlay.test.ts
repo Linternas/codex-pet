@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clampOverlayPosition,
   clampOverlayScale,
   overlayDefaults,
   resolveAutoWalkX,
@@ -83,4 +84,10 @@ it("limits walking to the current display's usable area, including negative coor
   expect(resolveAutoWalkX({ ...bounds, x: -301 }, workArea, 2)).toBe(-300);
   expect(resolveAutoWalkX({ ...bounds, x: -300 }, workArea, 2)).toBe(-300);
   expect(resolveAutoWalkX({ ...bounds, y: 600 }, workArea, 2)).toBe(-1200);
+});
+
+it("returns a saved overlay to the selected display after a monitor disappears", () => {
+  const bounds = { x: -1400, y: 990, width: 208, height: 254 };
+  const workArea = { x: 0, y: 32, width: 1200, height: 800 };
+  expect(clampOverlayPosition(bounds, workArea)).toEqual({ x: 0, y: 578 });
 });

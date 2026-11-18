@@ -1,6 +1,14 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("codexPet", {
+  getAgentSessions: () => ipcRenderer.invoke("session:get"),
+  configureAgentHooks: (provider, enabled) =>
+    ipcRenderer.invoke("session:configure", { provider, enabled }),
+  onAgentSessions: (callback) => {
+    const listener = (_event, sessions) => callback(sessions);
+    ipcRenderer.on("session:changed", listener);
+    return () => ipcRenderer.removeListener("session:changed", listener);
+  },
   getAppUpdate: () => ipcRenderer.invoke("app-update:state"),
   checkAppUpdate: () => ipcRenderer.invoke("app-update:check"),
   downloadAppUpdate: () => ipcRenderer.invoke("app-update:download"),

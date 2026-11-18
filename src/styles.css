@@ -750,3 +750,7 @@ h1 {
   box-shadow: none;
   color: #286d60;
 }
+
+.session-card {
+  overflow-wrap: anywhere;
+}

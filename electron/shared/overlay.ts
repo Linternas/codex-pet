@@ -11,6 +11,18 @@ export type OverlayBounds = {
   readonly height: number;
 };
 
+export type OverlayPosition = { readonly x: number; readonly y: number };
+
+export function clampOverlayPosition(
+  bounds: OverlayBounds & OverlayPosition,
+  workArea: OverlayBounds & OverlayPosition,
+): OverlayPosition {
+  return {
+    x: Math.max(workArea.x, Math.min(bounds.x, workArea.x + workArea.width - bounds.width)),
+    y: Math.max(workArea.y, Math.min(bounds.y, workArea.y + workArea.height - bounds.height)),
+  };
+}
+
 export function clampOverlayScale(scale: number): number {
   if (!Number.isFinite(scale)) {
     return overlayDefaults.defaultScale;

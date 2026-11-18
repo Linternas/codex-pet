@@ -1,8 +1,15 @@
-import { access, readFile } from "node:fs/promises";
+import { access, mkdir, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
+import type { Server } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type electronType from "electron";
+import { z } from "zod";
+import {
+  type AgentSession,
+  agentProviderSchema,
+  agentSessionChannels,
+} from "../shared/agentSessions.js";
 import { appUpdateChannels } from "../shared/appUpdate.js";
 import {
   type InstallPetRequest,
@@ -29,9 +36,15 @@ import {
 } from "../shared/petAssets.js";
 import {
   type PetPreferences,
+  defaultPetPreferences,
   readPetPreferences,
   writePetPreferences,
 } from "../shared/userPreferences.js";
+import {
+  configureAgentHooks,
+  startAgentSessionReceiver,
+  updateAgentSessions,
+} from "./agentSessions.js";
 import { getInstallerStatus } from "./installerStatus.js";
 import {
   getKeyboardPermission,
@@ -49,8 +62,19 @@ import { registerUpdateIpcHandlers } from "./updateIpc.js";
 
 const require = createRequire(import.meta.url);
 const electron: typeof electronType = require("electron");
-const { BrowserWindow, Menu, Tray, app, dialog, ipcMain, nativeImage, shell, protocol, net } =
-  electron;
+const {
+  BrowserWindow,
+  Menu,
+  Tray,
+  app,
+  dialog,
+  ipcMain,
+  nativeImage,
+  shell,
+  protocol,
+  net,
+  screen,
+} = electron;
 const projectRoot = process.cwd();
 const assetOptions = () => ({
   homeDir: homedir(),
@@ -62,8 +86,13 @@ const preloadPath = join(projectRoot, "electron-preload.cjs");
 let mainWindow: InstanceType<typeof BrowserWindow> | undefined;
 let nodeInstallRequest: Promise<boolean> | undefined;
 let nodeConfirmationOpen = false;
+let sessionReceiver: Server | undefined;
+let agentSessions: AgentSession[] = [];
 let statusTray: StatusTray | undefined;
-let preferences: PetPreferences = { appliedPetId: null, autoWalk: false };
+let preferences: PetPreferences = { ...defaultPetPreferences };
+let placementToSave: Pick<Partial<PetPreferences>, "overlayScale" | "overlayPosition"> = {};
+let placementTimer: ReturnType<typeof setTimeout> | undefined;
+let quitting = false;
 let pendingPreferencesWrite = Promise.resolve();
 
 function updatePreferences(patch: Partial<PetPreferences>): Promise<void> {
@@ -101,6 +130,7 @@ async function getState(): Promise<PetManagerState> {
       visible: overlayController.isVisible(),
       scale: overlayScale,
       autoWalk: preferences.autoWalk,
+      clickThrough: preferences.clickThrough,
     },
     installer: await getInstallerStatus(),
   };
@@ -182,6 +212,27 @@ async function openAccessibilitySettings(): Promise<void> {
   throw new Error("macOS only");
 }
 
+function savePlacement(): void {
+  clearTimeout(placementTimer);
+  placementTimer = undefined;
+  if (Object.keys(placementToSave).length === 0) return;
+  const patch = placementToSave;
+  placementToSave = {};
+  void updatePreferences(patch).catch(console.error);
+}
+
+function schedulePlacementSave(patch: typeof placementToSave): void {
+  placementToSave = { ...placementToSave, ...patch };
+  clearTimeout(placementTimer);
+  placementTimer = setTimeout(savePlacement, 250);
+}
+
+function movePet(deltaX: number, deltaY: number): void {
+  if (preferences.clickThrough) return;
+  const position = overlayController.moveBy(deltaX, deltaY);
+  if (position) schedulePlacementSave({ overlayPosition: position });
+}
+
 function createMenuBarItem(): void {
   if (statusTray !== undefined) {
     return;
@@ -195,6 +246,30 @@ function createMenuBarItem(): void {
     openManager: () => {
       void createWindow();
     },
+    petReady: () => preferences.appliedPetId !== null,
+    petVisible: overlayController.isVisible,
+    autoWalk: () => preferences.autoWalk,
+    clickThrough: () => preferences.clickThrough,
+    toggleVisibility: () => {
+      if (overlayController.isVisible()) overlayController.hide();
+      else {
+        overlayController.keepOnScreen();
+        overlayController.showInactive();
+      }
+      void publishState().catch(console.error);
+    },
+    toggleAutoWalk: () => {
+      void setAutoWalk(!preferences.autoWalk).catch(console.error);
+    },
+    toggleClickThrough: () => {
+      void updatePreferences({ clickThrough: !preferences.clickThrough })
+        .then(() => {
+          overlayController.setClickThrough(preferences.clickThrough);
+          return publishState();
+        })
+        .catch(console.error)
+        .finally(() => statusTray?.refresh());
+    },
     openAccessibilitySettings: () => {
       void openAccessibilitySettings();
     },
@@ -206,9 +281,15 @@ function createMenuBarItem(): void {
 
 async function publishState(): Promise<PetManagerState> {
   const state = await getState();
+  statusTray?.refresh();
   mainWindow?.webContents.send(petChannels.stateChanged, state);
   overlayController.sendState(state);
   return state;
+}
+
+async function setAutoWalk(enabled: boolean): Promise<PetManagerResult> {
+  await updatePreferences({ autoWalk: enabled });
+  return { kind: "ready", state: await publishState() };
 }
 
 async function applyPet({ petId }: PetIdRequest): Promise<PetManagerResult> {
@@ -217,7 +298,8 @@ async function applyPet({ petId }: PetIdRequest): Promise<PetManagerResult> {
   if (!state.pets.some((pet) => pet.manifest.id === petId))
     throw new Error("캐릭터를 찾을 수 없습니다.");
   await updatePreferences({ appliedPetId: petId });
-  await overlayController.ensure(overlayScale, devServerUrl);
+  await overlayController.ensure(overlayScale, preferences.overlayPosition, devServerUrl);
+  overlayController.setClickThrough(preferences.clickThrough);
   overlayController.showInactive();
   overlayController.resize(overlayScale);
 
@@ -247,15 +329,13 @@ async function deletePet({ petId }: PetIdRequest): Promise<PetManagerResult> {
 async function setOverlayScale({ scale }: OverlayScaleRequest): Promise<PetManagerResult> {
   overlayScale = clampOverlayScale(scale);
   overlayController.resize(overlayScale);
+  schedulePlacementSave({ overlayScale });
 
   return { kind: "ready", state: await publishState() };
 }
 
 async function resizeOverlay({ width }: OverlayResizeRequest): Promise<PetManagerResult> {
-  overlayScale = resolveOverlayScaleFromWidth(width);
-  overlayController.resize(overlayScale);
-
-  return { kind: "ready", state: await publishState() };
+  return setOverlayScale({ scale: resolveOverlayScaleFromWidth(width) });
 }
 
 registerPetIpcHandlers(ipcMain, {
@@ -263,13 +343,10 @@ registerPetIpcHandlers(ipcMain, {
   deletePet,
   getState,
   installPet,
-  setAutoWalk: async (enabled) => {
-    await updatePreferences({ autoWalk: enabled });
-    return { kind: "ready", state: await publishState() };
-  },
+  setAutoWalk,
   stepAutoWalk: (sender, direction) =>
     preferences.autoWalk && overlayController.stepAutoWalk(sender, direction),
-  moveOverlay: (deltaX, deltaY) => overlayController.moveBy(deltaX, deltaY),
+  moveOverlay: movePet,
   requestAnimation: (state) => overlayController.sendAnimation(state),
   refreshInstaller: async () => {
     await getInstallerStatus(true);
@@ -281,7 +358,15 @@ registerPetIpcHandlers(ipcMain, {
 });
 registerUpdateIpcHandlers(ipcMain, shell);
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
+  if (!quitting) {
+    event.preventDefault();
+    quitting = true;
+    savePlacement();
+    void pendingPreferencesWrite.finally(() => app.quit());
+    return;
+  }
+  sessionReceiver?.close();
   stopGlobalKeyboardActivity();
   overlayController.close();
 });
@@ -301,9 +386,15 @@ async function showInitialPet(): Promise<void> {
 
 async function restorePreferences(): Promise<void> {
   preferences = await readPetPreferences(app.getPath("userData"));
+  overlayScale = preferences.overlayScale;
   if (preferences.appliedPetId === null) {
     preferences.appliedPetId = (await getState()).pets[0]?.manifest.id ?? null;
   }
+}
+
+function publishAgentSessions(): void {
+  mainWindow?.webContents.send(agentSessionChannels.changed, agentSessions);
+  overlayController.sendAgentSessions(agentSessions);
 }
 
 async function startApp(): Promise<void> {
@@ -325,8 +416,52 @@ async function startApp(): Promise<void> {
     }
   });
   await restorePreferences();
+  const receiverDir = join(app.getPath("userData"), ".agents");
+  const receiverPath = join(receiverDir, "events.sock");
+  try {
+    await mkdir(receiverDir, { recursive: true, mode: 0o700 });
+    sessionReceiver = await startAgentSessionReceiver(receiverPath, (event) => {
+      if (!preferences.agentProviders[event.provider]) return;
+      agentSessions = updateAgentSessions(agentSessions, event);
+      publishAgentSessions();
+    });
+  } catch (error) {
+    console.error("Codex Pet session receiver unavailable", error);
+  }
+  ipcMain.handle(agentSessionChannels.get, () => agentSessions);
+  ipcMain.handle(agentSessionChannels.configure, async (event, payload: unknown) => {
+    if (event.sender !== mainWindow?.webContents)
+      throw new Error("Invalid session settings sender");
+    const { provider, enabled } = z
+      .object({
+        provider: agentProviderSchema,
+        enabled: z.boolean(),
+      })
+      .parse(payload);
+    if (enabled && !sessionReceiver) throw new Error("세션 연결을 시작할 수 없습니다.");
+    if (!enabled) {
+      await updatePreferences({
+        agentProviders: { ...preferences.agentProviders, [provider]: false },
+      });
+      agentSessions = agentSessions.filter((session) => session.provider !== provider);
+      publishAgentSessions();
+    }
+    await configureAgentHooks(
+      provider,
+      enabled,
+      process.execPath,
+      join(projectRoot, "scripts", "session-hook.cjs"),
+      receiverPath,
+    );
+    if (enabled)
+      await updatePreferences({
+        agentProviders: { ...preferences.agentProviders, [provider]: true },
+      });
+  });
   startKeyboardMonitor();
   createMenuBarItem();
+  screen.on("display-removed", overlayController.keepOnScreen);
+  screen.on("display-metrics-changed", overlayController.keepOnScreen);
   await showInitialPet();
 }
 

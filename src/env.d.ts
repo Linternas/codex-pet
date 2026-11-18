@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+import type { AgentProvider, AgentSession } from "../electron/shared/agentSessions.js";
 import type { AppUpdateState } from "../electron/shared/appUpdate.js";
 import type {
   AutoWalkDirection,
@@ -12,6 +13,11 @@ import type { UpdateCheckResult } from "../electron/shared/update.js";
 declare global {
   interface Window {
     readonly codexPet?: {
+      readonly getAgentSessions: () => Promise<readonly AgentSession[]>;
+      readonly configureAgentHooks: (provider: AgentProvider, enabled: boolean) => Promise<void>;
+      readonly onAgentSessions: (
+        callback: (sessions: readonly AgentSession[]) => void,
+      ) => () => void;
       readonly getAppUpdate: () => Promise<AppUpdateState>;
       readonly checkAppUpdate: () => Promise<AppUpdateState>;
       readonly downloadAppUpdate: () => Promise<AppUpdateState>;

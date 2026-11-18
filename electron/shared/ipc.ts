@@ -7,6 +7,7 @@ import { petIdSchema, petViewSchema } from "./petAssets.js";
 export const overlayStateSchema = z.object({
   visible: z.boolean(),
   autoWalk: z.boolean(),
+  clickThrough: z.boolean(),
   scale: z.number().min(overlayDefaults.minScale).max(overlayDefaults.maxScale),
 });
 

@@ -9,7 +9,7 @@ const fallbackIconDataUrl =
 type NativeImageModule = typeof electronType.nativeImage;
 type MenuModule = typeof electronType.Menu;
 type TrayConstructor = typeof electronType.Tray;
-export type StatusTray = InstanceType<TrayConstructor>;
+export type StatusTray = { readonly refresh: () => void };
 
 export type CreateStatusTrayOptions = {
   readonly Menu: MenuModule;
@@ -17,6 +17,13 @@ export type CreateStatusTrayOptions = {
   readonly nativeImage: NativeImageModule;
   readonly projectRoot: string;
   readonly openManager: () => void;
+  readonly petReady: () => boolean;
+  readonly petVisible: () => boolean;
+  readonly autoWalk: () => boolean;
+  readonly clickThrough: () => boolean;
+  readonly toggleVisibility: () => void;
+  readonly toggleAutoWalk: () => void;
+  readonly toggleClickThrough: () => void;
   readonly openAccessibilitySettings: () => void;
   readonly quit: () => void;
 };
@@ -52,29 +59,54 @@ export function createStatusTray({
   nativeImage,
   projectRoot,
   openManager,
+  petReady,
+  petVisible,
+  autoWalk,
+  clickThrough,
+  toggleVisibility,
+  toggleAutoWalk,
+  toggleClickThrough,
   openAccessibilitySettings,
   quit,
 }: CreateStatusTrayOptions): StatusTray {
   const tray = new Tray(createStatusIcon(nativeImage, projectRoot));
   tray.setToolTip("Codex Pet");
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      {
-        label: "Codex Pet 열기",
-        click: openManager,
-      },
-      {
-        label: "손쉬운 사용 권한",
-        click: openAccessibilitySettings,
-      },
-      { type: "separator" },
-      {
-        label: "종료",
-        click: quit,
-      },
-    ]),
-  );
+  function refresh(): void {
+    tray.setContextMenu(
+      Menu.buildFromTemplate([
+        {
+          label: "Codex Pet 열기",
+          click: openManager,
+        },
+        {
+          label: petVisible() ? "캐릭터 숨기기" : "캐릭터 다시 표시",
+          enabled: petReady(),
+          click: toggleVisibility,
+        },
+        {
+          label: autoWalk() ? "자동 산책 멈추기" : "자동 산책 시작",
+          click: toggleAutoWalk,
+        },
+        {
+          label: "클릭 통과",
+          type: "checkbox",
+          checked: clickThrough(),
+          click: toggleClickThrough,
+        },
+        {
+          label: "손쉬운 사용 권한",
+          click: openAccessibilitySettings,
+        },
+        { type: "separator" },
+        {
+          label: "종료",
+          click: quit,
+        },
+      ]),
+    );
+  }
+  refresh();
   tray.on("click", openManager);
 
-  return tray;
+  return { refresh };
 }

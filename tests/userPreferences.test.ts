@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  defaultPetPreferences,
   readPetPreferences,
   resolvePetPreferencesPath,
   writePetPreferences,
@@ -13,19 +14,29 @@ describe("pet user preferences", () => {
     const userDataDir = await mkdtemp(join(tmpdir(), "codex-pet-preferences-"));
 
     await expect(readPetPreferences(userDataDir)).resolves.toEqual({
-      appliedPetId: null,
-      autoWalk: false,
+      ...defaultPetPreferences,
     });
   });
 
   it("Given an applied pet is saved When preferences are read Then the pet id is restored", async () => {
     const userDataDir = await mkdtemp(join(tmpdir(), "codex-pet-preferences-"));
 
-    await writePetPreferences(userDataDir, { appliedPetId: "frieren", autoWalk: true });
-
-    await expect(readPetPreferences(userDataDir)).resolves.toEqual({
+    await writePetPreferences(userDataDir, {
+      ...defaultPetPreferences,
       appliedPetId: "frieren",
       autoWalk: true,
+      clickThrough: true,
+      overlayScale: 0.8,
+      overlayPosition: { x: -400, y: 120 },
+    });
+
+    await expect(readPetPreferences(userDataDir)).resolves.toEqual({
+      ...defaultPetPreferences,
+      appliedPetId: "frieren",
+      autoWalk: true,
+      clickThrough: true,
+      overlayScale: 0.8,
+      overlayPosition: { x: -400, y: 120 },
     });
   });
 
@@ -36,8 +47,8 @@ describe("pet user preferences", () => {
       JSON.stringify({ appliedPetId: "guga" }),
     );
     await expect(readPetPreferences(userDataDir)).resolves.toEqual({
+      ...defaultPetPreferences,
       appliedPetId: "guga",
-      autoWalk: false,
     });
   });
 
@@ -45,7 +56,7 @@ describe("pet user preferences", () => {
     const tempRoot = await mkdtemp(join(tmpdir(), "codex-pet-preferences-"));
     const userDataDir = join(tempRoot, "nested", "user-data");
 
-    await writePetPreferences(userDataDir, { appliedPetId: "guga", autoWalk: false });
+    await writePetPreferences(userDataDir, { ...defaultPetPreferences, appliedPetId: "guga" });
 
     const savedPreferences = await stat(resolvePetPreferencesPath(userDataDir));
 

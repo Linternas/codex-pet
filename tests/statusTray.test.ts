@@ -30,6 +30,11 @@ describe("macOS status tray", () => {
     expect(traySource).toContain("setContextMenu");
     expect(traySource).toContain("Codex Pet 열기");
     expect(traySource).toContain("손쉬운 사용 권한");
+    expect(traySource).toContain("캐릭터 숨기기");
+    expect(traySource).toContain("캐릭터 다시 표시");
+    expect(traySource).toContain('autoWalk() ? "자동 산책 멈추기" : "자동 산책 시작"');
+    expect(traySource).toContain("click: toggleAutoWalk");
+    expect(traySource).toContain("클릭 통과");
     expect(traySource).toContain("종료");
   });
 });

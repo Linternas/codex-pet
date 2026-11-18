@@ -27,7 +27,7 @@ beforeEach(async () => {
   stepAutoWalk.mockReset().mockResolvedValue(true);
   overlayState = {
     appliedPetId: "test",
-    overlay: { autoWalk: false, visible: true, scale: 0.65 },
+    overlay: { autoWalk: false, visible: true, scale: 0.65, clickThrough: false },
     installer: { npxAvailable: true, npxVersion: "test", instructions: null },
     pets: [
       {
@@ -60,6 +60,8 @@ beforeEach(async () => {
         publishState = callback;
       },
       getState: async () => ({ kind: "ready", state: overlayState }),
+      getAgentSessions: async () => [],
+      onAgentSessions: () => undefined,
       stepAutoWalk,
     },
   });
