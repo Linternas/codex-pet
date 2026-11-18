@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   clampOverlayScale,
   overlayDefaults,
+  resolveAutoWalkX,
   resolveOverlayBounds,
   resolveOverlayScaleFromWidth,
 } from "../electron/shared/overlay.js";
@@ -71,4 +72,15 @@ describe("overlay sizing", () => {
     expect(defaultAnimationState).toBe("idle");
     expect("ambientDurationMs" in animationTiming).toBe(false);
   });
+});
+
+it("limits walking to the current display's usable area, including negative coordinates", () => {
+  const workArea = { x: -1200, y: 24, width: 1100, height: 800 };
+  const bounds = { x: -1200, y: 300, width: 200, height: 240 };
+
+  expect(resolveAutoWalkX(bounds, workArea, -2)).toBe(-1200);
+  expect(resolveAutoWalkX(bounds, workArea, 2)).toBe(-1198);
+  expect(resolveAutoWalkX({ ...bounds, x: -301 }, workArea, 2)).toBe(-300);
+  expect(resolveAutoWalkX({ ...bounds, x: -300 }, workArea, 2)).toBe(-300);
+  expect(resolveAutoWalkX({ ...bounds, y: 600 }, workArea, 2)).toBe(-1200);
 });

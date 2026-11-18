@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld("codexPet", {
   applyPet: (petId) => ipcRenderer.invoke("pet:apply", { petId }),
   setOverlayScale: (scale) => ipcRenderer.invoke("pet:set-overlay-scale", { scale }),
   resizeOverlay: (width) => ipcRenderer.invoke("pet:resize-overlay", { width }),
+  setAutoWalk: (enabled) => ipcRenderer.invoke("pet:set-auto-walk", enabled),
+  stepAutoWalk: (direction) => ipcRenderer.invoke("pet:step-auto-walk", direction),
   moveOverlay: (deltaX, deltaY) => ipcRenderer.invoke("pet:move-overlay", { deltaX, deltaY }),
   requestAnimation: (state) => ipcRenderer.invoke("pet:request-animation", { state }),
   onStateChanged: (callback) => {

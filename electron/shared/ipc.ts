@@ -6,6 +6,7 @@ import { petIdSchema, petViewSchema } from "./petAssets.js";
 
 export const overlayStateSchema = z.object({
   visible: z.boolean(),
+  autoWalk: z.boolean(),
   scale: z.number().min(overlayDefaults.minScale).max(overlayDefaults.maxScale),
 });
 
@@ -49,6 +50,10 @@ export const overlayMoveRequestSchema = z.object({
   deltaY: z.number(),
 });
 
+export const autoWalkSettingSchema = z.boolean();
+export const autoWalkDirectionSchema = z.enum(["run-left", "run-right"]);
+export type AutoWalkDirection = z.infer<typeof autoWalkDirectionSchema>;
+
 export const overlayAnimationRequestSchema = z.object({
   state: z.enum(petAnimationStates),
 });
@@ -78,6 +83,8 @@ export const petChannels = {
   setOverlayScale: "pet:set-overlay-scale",
   resizeOverlay: "pet:resize-overlay",
   moveOverlay: "pet:move-overlay",
+  setAutoWalk: "pet:set-auto-walk",
+  stepAutoWalk: "pet:step-auto-walk",
   requestAnimation: "pet:request-animation",
   stateChanged: "pet:state-changed",
   animationRequested: "pet:animation-requested",

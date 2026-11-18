@@ -6,6 +6,7 @@ export type ManagerRefs = {
   readonly status: HTMLElement;
   readonly versionInfo: HTMLElement;
   readonly animations: HTMLElement;
+  readonly autoWalk: HTMLInputElement;
   readonly input: HTMLInputElement | null;
   readonly addButton: HTMLButtonElement | null;
   readonly list: HTMLElement;

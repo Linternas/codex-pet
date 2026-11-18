@@ -5,12 +5,14 @@ import { petIdSchema } from "./petAssets.js";
 
 export const petPreferencesSchema = z.object({
   appliedPetId: petIdSchema.nullable(),
+  autoWalk: z.boolean().default(false),
 });
 
 export type PetPreferences = z.infer<typeof petPreferencesSchema>;
 
 const defaultPetPreferences = {
   appliedPetId: null,
+  autoWalk: false,
 } as const satisfies PetPreferences;
 
 export function resolvePetPreferencesPath(userDataDir: string): string {

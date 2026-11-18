@@ -28,6 +28,22 @@ export function resolveOverlayBounds(scale: number): OverlayBounds {
   };
 }
 
+export function resolveAutoWalkX(
+  bounds: OverlayBounds & { x: number; y: number },
+  workArea: OverlayBounds & { x: number; y: number },
+  step: number,
+): number {
+  const maxX = workArea.x + workArea.width - bounds.width;
+  if (
+    maxX < workArea.x ||
+    bounds.y < workArea.y ||
+    bounds.y + bounds.height > workArea.y + workArea.height
+  )
+    return bounds.x;
+
+  return Math.min(maxX, Math.max(workArea.x, bounds.x + step));
+}
+
 export function resolveOverlayScaleFromWidth(width: number): number {
   return clampOverlayScale(width / overlayDefaults.baseWidth);
 }

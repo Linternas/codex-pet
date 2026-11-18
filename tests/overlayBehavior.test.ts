@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { PetManagerState } from "../electron/shared/ipc.js";
 import type { PetAnimationState } from "../electron/shared/petAnimation.js";
 
 vi.mock("../src/frameDetection.js", () => ({
@@ -10,6 +11,9 @@ let key: () => void;
 let animation: (state: PetAnimationState) => void;
 let tick: FrameRequestCallback;
 let now: number;
+let publishState: (state: PetManagerState) => void;
+let overlayState: PetManagerState;
+const stepAutoWalk = vi.fn(async () => true);
 function advance(milliseconds: number) {
   now += milliseconds;
   tick(now);
@@ -20,6 +24,24 @@ function state() {
 beforeEach(async () => {
   vi.resetModules();
   now = 100_000;
+  stepAutoWalk.mockReset().mockResolvedValue(true);
+  overlayState = {
+    appliedPetId: "test",
+    overlay: { autoWalk: false, visible: true, scale: 0.65 },
+    installer: { npxAvailable: true, npxVersion: "test", instructions: null },
+    pets: [
+      {
+        manifest: {
+          id: "test",
+          displayName: "Test",
+          spriteVersionNumber: 2,
+          description: "Test pet",
+          spritesheetPath: "spritesheet.webp",
+        },
+        spriteUrl: "test.webp",
+      },
+    ],
+  };
   vi.spyOn(Date, "now").mockImplementation(() => now);
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
     tick = callback;
@@ -34,19 +56,11 @@ beforeEach(async () => {
       onAnimationRequested: (callback: typeof animation) => {
         animation = callback;
       },
-      onStateChanged: () => undefined,
-      getState: async () => ({
-        kind: "ready",
-        state: {
-          appliedPetId: "test",
-          pets: [
-            {
-              manifest: { id: "test", displayName: "Test", spriteVersionNumber: 2 },
-              spriteUrl: "test.webp",
-            },
-          ],
-        },
-      }),
+      onStateChanged: (callback: typeof publishState) => {
+        publishState = callback;
+      },
+      getState: async () => ({ kind: "ready", state: overlayState }),
+      stepAutoWalk,
     },
   });
   const root = document.createElement("div");
@@ -101,5 +115,44 @@ describe("keyboard-driven overlay", () => {
     expect(state()).toBe("running");
     advance(8_400);
     expect(state()).toBe("looking");
+  });
+});
+
+describe("auto walk", () => {
+  async function advanceWalk(ms: number) {
+    advance(ms);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  it("opts in, rests and reverses at an edge, and pauses for keyboard activity", async () => {
+    await advanceWalk(10_000);
+    expect(stepAutoWalk).not.toHaveBeenCalled();
+
+    overlayState.overlay.autoWalk = true;
+    publishState(overlayState);
+    await advanceWalk(5_000);
+    expect(stepAutoWalk).toHaveBeenLastCalledWith("run-right");
+    expect(state()).toBe("run-right");
+
+    stepAutoWalk.mockResolvedValueOnce(false);
+    await advanceWalk(32);
+    expect(state()).toBe("idle");
+    await advanceWalk(4_999);
+    expect(stepAutoWalk).toHaveBeenCalledTimes(2);
+    await advanceWalk(1);
+    expect(stepAutoWalk).toHaveBeenLastCalledWith("run-left");
+    expect(state()).toBe("run-left");
+
+    key();
+    await advanceWalk(32);
+    expect(stepAutoWalk).toHaveBeenCalledTimes(3);
+    expect(state()).toBe("waving");
+
+    overlayState.overlay.autoWalk = false;
+    publishState(overlayState);
+    await advanceWalk(20_000);
+    expect(stepAutoWalk).toHaveBeenCalledTimes(3);
   });
 });

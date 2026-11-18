@@ -1,5 +1,5 @@
 import { MoveDiagonal2, createElement } from "lucide";
-import type { PetManagerState } from "../electron/shared/ipc.js";
+import type { AutoWalkDirection, PetManagerState } from "../electron/shared/ipc.js";
 import {
   type KeyboardAnimationActivity,
   recordKeyboardActivity,
@@ -39,6 +39,8 @@ type DragSession = {
 };
 
 type AnimationRuntime = {
+  autoWalk: boolean;
+  walkState: AutoWalkDirection | null;
   keyboard: KeyboardAnimationActivity;
   column: number;
   version: number;
@@ -77,7 +79,7 @@ function resolveRuntimeState(runtime: AnimationRuntime, now: number): PetAnimati
   if (keyboardState !== null) return keyboardState;
 
   if (runtime.hover && runtime.version !== 2) return "jumping";
-  return resolveRestAnimation(runtime.lastActivityAt, now);
+  return runtime.walkState ?? resolveRestAnimation(runtime.lastActivityAt, now);
 }
 
 function paint(refs: OverlayRefs, runtime: AnimationRuntime, now = Date.now()): void {
@@ -105,6 +107,8 @@ function paint(refs: OverlayRefs, runtime: AnimationRuntime, now = Date.now()): 
 }
 
 function renderState(refs: OverlayRefs, runtime: AnimationRuntime, state: PetManagerState): void {
+  runtime.autoWalk = state.overlay.autoWalk;
+  if (!runtime.autoWalk) runtime.walkState = null;
   const pet = state.pets.find((candidate) => candidate.manifest.id === state.appliedPetId);
   if (pet === undefined) {
     refs.sprite.style.backgroundImage = "";
@@ -155,9 +159,68 @@ function requestAnimation(
   paint(refs, runtime, now);
 }
 
+const walkDurationMs = 3_000;
+const walkRestMs = 5_000;
+const walkStepMs = 32;
+
 function bindAnimationTimers(refs: OverlayRefs, runtime: AnimationRuntime): void {
+  let direction: AutoWalkDirection = "run-right";
+  let nextWalkAt = Date.now() + walkRestMs;
+  let walkUntil = 0;
+  let nextStepAt = 0;
+  let stepping = false;
+
+  function canWalk(now: number): boolean {
+    return (
+      runtime.autoWalk &&
+      runtime.spriteUrl !== null &&
+      !document.hidden &&
+      !runtime.hover &&
+      refs.shell.getAttribute("data-dragging") !== "true" &&
+      refs.grip.getAttribute("data-resizing") !== "true" &&
+      now > runtime.requestedUntil &&
+      resolveKeyboardAnimation(runtime.keyboard, now) === null
+    );
+  }
+
+  function rest(now: number): void {
+    walkUntil = 0;
+    runtime.walkState = null;
+    nextWalkAt = now + walkRestMs;
+  }
+
+  function tickWalk(now: number): void {
+    if (!canWalk(now) || (walkUntil > 0 && now >= walkUntil)) {
+      rest(now);
+      return;
+    }
+    if (stepping || now < nextWalkAt || now < nextStepAt) return;
+
+    if (walkUntil === 0) walkUntil = now + walkDurationMs;
+    nextStepAt = now + walkStepMs;
+    stepping = true;
+    void api
+      .stepAutoWalk(direction)
+      .then((moved) => {
+        const completedAt = Date.now();
+        if (!canWalk(completedAt) || walkUntil === 0) return;
+        if (moved) {
+          runtime.walkState = direction;
+        } else {
+          direction = direction === "run-right" ? "run-left" : "run-right";
+          rest(completedAt);
+        }
+        paint(refs, runtime, completedAt);
+      })
+      .catch(() => rest(Date.now()))
+      .finally(() => {
+        stepping = false;
+      });
+  }
+
   const tick = (): void => {
     const now = Date.now();
+    tickWalk(now);
     const state = resolveRuntimeState(runtime, now);
     const frameDurationMs = runtime.frameDurationMs;
     if (state === runtime.state && now - runtime.lastFrameAt >= frameDurationMs) {
@@ -307,6 +370,8 @@ export function renderOverlay(root: HTMLElement): void {
     grip: query(root, "[data-resize-grip]"),
   };
   const runtime: AnimationRuntime = {
+    autoWalk: false,
+    walkState: null,
     keyboard: { lastKeyAt: null, greetingUntil: 0 },
     column: 0,
     version: 1,

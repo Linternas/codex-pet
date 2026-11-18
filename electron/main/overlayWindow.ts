@@ -1,14 +1,14 @@
 import { createRequire } from "node:module";
 import type electronType from "electron";
-import type { PetManagerState } from "../shared/ipc.js";
+import type { AutoWalkDirection, PetManagerState } from "../shared/ipc.js";
 import { petChannels } from "../shared/ipc.js";
-import { resolveOverlayBounds } from "../shared/overlay.js";
+import { resolveAutoWalkX, resolveOverlayBounds } from "../shared/overlay.js";
 import type { PetAnimationState } from "../shared/petAnimation.js";
 import { resolveRendererUrl } from "./rendererUrl.js";
 
 const require = createRequire(import.meta.url);
 const electron: typeof electronType = require("electron");
-const { BrowserWindow } = electron;
+const { BrowserWindow, screen } = electron;
 
 export type OverlayWindowController = {
   readonly close: () => void;
@@ -16,6 +16,10 @@ export type OverlayWindowController = {
   readonly hide: () => void;
   readonly isVisible: () => boolean;
   readonly moveBy: (deltaX: number, deltaY: number) => void;
+  readonly stepAutoWalk: (
+    sender: electronType.WebContents,
+    direction: AutoWalkDirection,
+  ) => boolean;
   readonly resize: (scale: number) => void;
   readonly sendKeyboardActivity: () => void;
   readonly sendAnimation: (state: PetAnimationState) => void;
@@ -94,6 +98,17 @@ export function createOverlayWindowController({
       const x = position[0] ?? 0;
       const y = position[1] ?? 0;
       window.setPosition(Math.round(x + deltaX), Math.round(y + deltaY), false);
+    },
+    stepAutoWalk: (sender, direction) => {
+      const window = getWindow();
+      if (!window?.isVisible() || sender !== window.webContents) return false;
+
+      const bounds = window.getBounds();
+      const { workArea } = screen.getDisplayMatching(bounds);
+      const x = resolveAutoWalkX(bounds, workArea, direction === "run-left" ? -2 : 2);
+      if (x === bounds.x) return false;
+      window.setPosition(x, bounds.y, false);
+      return true;
     },
     resize: (scale) => {
       const bounds = resolveOverlayBounds(scale);

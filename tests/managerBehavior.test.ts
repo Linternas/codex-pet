@@ -37,7 +37,7 @@ beforeEach(() => {
   state = {
     pets: [],
     appliedPetId: null,
-    overlay: { visible: false, scale: 0.65 },
+    overlay: { visible: false, scale: 0.65, autoWalk: false },
     installer: { npxAvailable: true, npxVersion: "10.0.0", instructions: null },
   };
   api = {
@@ -78,6 +78,11 @@ beforeEach(() => {
       return { kind: "ready" as const, state };
     }),
     downloadNode: vi.fn(async () => true),
+    setAutoWalk: vi.fn(async (enabled: boolean) => {
+      state.overlay.autoWalk = enabled;
+      return { kind: "ready", state };
+    }),
+    stepAutoWalk: vi.fn(async () => false),
     moveOverlay: vi.fn(async () => undefined),
     getAccessibilityPermission: vi.fn(async () => true),
     openAccessibilitySettings: vi.fn(async () => undefined),
@@ -98,6 +103,22 @@ beforeEach(() => {
 });
 
 describe("pet manager user flows", () => {
+  it("saves the auto-walk toggle in either direction", async () => {
+    await render();
+    const toggle = document.querySelector<HTMLInputElement>("[data-auto-walk]");
+    if (toggle === null) throw new Error("missing auto-walk toggle");
+
+    expect(toggle.checked).toBe(false);
+    toggle.click();
+    await settle();
+    expect(api.setAutoWalk).toHaveBeenLastCalledWith(true);
+    expect(toggle.checked).toBe(true);
+    toggle.click();
+    await settle();
+    expect(api.setAutoWalk).toHaveBeenLastCalledWith(false);
+    expect(toggle.checked).toBe(false);
+  });
+
   it("downloads a typed pet ID, lists its version and deletes the downloaded pet", async () => {
     await render();
     const input = document.querySelector<HTMLInputElement>("[data-pet-id-input]");
@@ -214,7 +235,7 @@ describe("pet manager user flows", () => {
       ...state,
       pets: [pet],
       appliedPetId: pet.manifest.id,
-      overlay: { visible: true, scale: 0.65 },
+      overlay: { visible: true, scale: 0.65, autoWalk: false },
     };
     await render();
     expect(document.querySelectorAll("[data-animations] button")).toHaveLength(9);

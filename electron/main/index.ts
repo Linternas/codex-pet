@@ -27,7 +27,11 @@ import {
   listProjectPets,
   resolvePetPaths,
 } from "../shared/petAssets.js";
-import { readPetPreferences, writePetPreferences } from "../shared/userPreferences.js";
+import {
+  type PetPreferences,
+  readPetPreferences,
+  writePetPreferences,
+} from "../shared/userPreferences.js";
 import { getInstallerStatus } from "./installerStatus.js";
 import {
   getKeyboardPermission,
@@ -59,7 +63,18 @@ let mainWindow: InstanceType<typeof BrowserWindow> | undefined;
 let nodeInstallRequest: Promise<boolean> | undefined;
 let nodeConfirmationOpen = false;
 let statusTray: StatusTray | undefined;
-let appliedPetId: string | null = null;
+let preferences: PetPreferences = { appliedPetId: null, autoWalk: false };
+let pendingPreferencesWrite = Promise.resolve();
+
+function updatePreferences(patch: Partial<PetPreferences>): Promise<void> {
+  const update = pendingPreferencesWrite.then(async () => {
+    const next = { ...preferences, ...patch };
+    await writePetPreferences(app.getPath("userData"), next);
+    preferences = next;
+  });
+  pendingPreferencesWrite = update.catch(() => undefined);
+  return update;
+}
 let overlayScale: number = overlayDefaults.defaultScale;
 const overlayController = createOverlayWindowController({ preloadPath, projectRoot });
 app.setName("Codex Pet");
@@ -73,18 +88,19 @@ function startKeyboardMonitor(): void {
 async function getState(): Promise<PetManagerState> {
   const pets = cachedPets ?? (await listProjectPets(assetOptions()));
   cachedPets = pets;
-  const appliedPet = pets.find((pet) => pet.manifest.id === appliedPetId);
+  const appliedPet = pets.find((pet) => pet.manifest.id === preferences.appliedPetId);
 
   if (appliedPet === undefined) {
-    appliedPetId = null;
+    preferences.appliedPetId = null;
   }
 
   return {
     pets: [...pets],
-    appliedPetId,
+    appliedPetId: preferences.appliedPetId,
     overlay: {
       visible: overlayController.isVisible(),
       scale: overlayScale,
+      autoWalk: preferences.autoWalk,
     },
     installer: await getInstallerStatus(),
   };
@@ -200,8 +216,7 @@ async function applyPet({ petId }: PetIdRequest): Promise<PetManagerResult> {
   const state = await getState();
   if (!state.pets.some((pet) => pet.manifest.id === petId))
     throw new Error("캐릭터를 찾을 수 없습니다.");
-  await writePetPreferences(app.getPath("userData"), { appliedPetId: petId });
-  appliedPetId = petId;
+  await updatePreferences({ appliedPetId: petId });
   await overlayController.ensure(overlayScale, devServerUrl);
   overlayController.showInactive();
   overlayController.resize(overlayScale);
@@ -221,9 +236,8 @@ async function installPet({ petId }: InstallPetRequest): Promise<PetManagerResul
 async function deletePet({ petId }: PetIdRequest): Promise<PetManagerResult> {
   await deleteProjectPet(petId, assetOptions());
   cachedPets = undefined;
-  if (appliedPetId === petId) {
-    await writePetPreferences(app.getPath("userData"), { appliedPetId: null });
-    appliedPetId = null;
+  if (preferences.appliedPetId === petId) {
+    await updatePreferences({ appliedPetId: null });
     overlayController.hide();
   }
 
@@ -249,6 +263,12 @@ registerPetIpcHandlers(ipcMain, {
   deletePet,
   getState,
   installPet,
+  setAutoWalk: async (enabled) => {
+    await updatePreferences({ autoWalk: enabled });
+    return { kind: "ready", state: await publishState() };
+  },
+  stepAutoWalk: (sender, direction) =>
+    preferences.autoWalk && overlayController.stepAutoWalk(sender, direction),
   moveOverlay: (deltaX, deltaY) => overlayController.moveBy(deltaX, deltaY),
   requestAnimation: (state) => overlayController.sendAnimation(state),
   refreshInstaller: async () => {
@@ -280,9 +300,10 @@ async function showInitialPet(): Promise<void> {
 }
 
 async function restorePreferences(): Promise<void> {
-  const preferences = await readPetPreferences(app.getPath("userData"));
-  appliedPetId = preferences.appliedPetId;
-  if (appliedPetId === null) appliedPetId = (await getState()).pets[0]?.manifest.id ?? null;
+  preferences = await readPetPreferences(app.getPath("userData"));
+  if (preferences.appliedPetId === null) {
+    preferences.appliedPetId = (await getState()).pets[0]?.manifest.id ?? null;
+  }
 }
 
 async function startApp(): Promise<void> {

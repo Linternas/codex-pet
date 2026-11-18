@@ -1,11 +1,14 @@
 import type { IpcMain } from "electron";
 import {
+  type AutoWalkDirection,
   type InstallPetRequest,
   type OverlayResizeRequest,
   type OverlayScaleRequest,
   type PetIdRequest,
   type PetManagerResult,
   type PetManagerState,
+  autoWalkDirectionSchema,
+  autoWalkSettingSchema,
   installPetRequestSchema,
   overlayAnimationRequestSchema,
   overlayMoveRequestSchema,
@@ -22,6 +25,8 @@ type PetIpcHandlers = {
   readonly refreshInstaller: () => Promise<PetManagerResult>;
   readonly getState: () => Promise<PetManagerState>;
   readonly installPet: (request: InstallPetRequest) => Promise<PetManagerResult>;
+  readonly setAutoWalk: (enabled: boolean) => Promise<PetManagerResult>;
+  readonly stepAutoWalk: (sender: Electron.WebContents, direction: AutoWalkDirection) => boolean;
   readonly moveOverlay: (deltaX: number, deltaY: number) => void;
   readonly requestAnimation: (state: PetAnimationState) => void;
   readonly resizeOverlay: (request: OverlayResizeRequest) => Promise<PetManagerResult>;
@@ -99,6 +104,18 @@ export function registerPetIpcHandlers(ipcMain: IpcMain, handlers: PetIpcHandler
     const { deltaX, deltaY } = parseRequest(overlayMoveRequestSchema, payload);
     handlers.moveOverlay(deltaX, deltaY);
   });
+
+  ipcMain.handle(petChannels.setAutoWalk, async (_event, enabled: unknown) => {
+    try {
+      return await handlers.setAutoWalk(autoWalkSettingSchema.parse(enabled));
+    } catch (error) {
+      return handlers.toErrorResult(error, await handlers.getState().catch(() => undefined));
+    }
+  });
+
+  ipcMain.handle(petChannels.stepAutoWalk, (event, direction: unknown) =>
+    handlers.stepAutoWalk(event.sender, autoWalkDirectionSchema.parse(direction)),
+  );
 
   ipcMain.handle(petChannels.requestAnimation, (_event, payload: unknown): void => {
     const { state } = parseRequest(overlayAnimationRequestSchema, payload);

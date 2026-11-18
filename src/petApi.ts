@@ -19,6 +19,7 @@ const previewState: PetManagerState = {
   appliedPetId: "guga",
   overlay: {
     visible: true,
+    autoWalk: false,
     scale: overlayDefaults.defaultScale,
   },
   installer: {
@@ -76,6 +77,11 @@ export function getPetApi(): PetApi {
       previewState.overlay.scale = width / 320;
       return ready(previewState);
     },
+    setAutoWalk: async (enabled) => {
+      previewState.overlay.autoWalk = enabled;
+      return ready(previewState);
+    },
+    stepAutoWalk: async () => false,
     moveOverlay: async () => undefined,
     requestAnimation: async () => undefined,
     onStateChanged: () => () => undefined,

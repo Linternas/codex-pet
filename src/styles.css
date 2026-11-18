@@ -256,6 +256,14 @@ h1 {
   color: #9a341f;
 }
 
+.auto-walk-setting {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  font-size: 13px;
+}
+
 .scale-row {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) 44px;

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const appMetadata = {
   name: "Codex Pet",
-  version: "0.0.3",
+  version: "0.0.4",
 } as const;
 
 export const releaseUpdateConfig = {
