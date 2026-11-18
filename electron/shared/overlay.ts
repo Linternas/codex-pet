@@ -40,20 +40,38 @@ export function resolveOverlayBounds(scale: number): OverlayBounds {
   };
 }
 
-export function resolveAutoWalkX(
-  bounds: OverlayBounds & { x: number; y: number },
-  workArea: OverlayBounds & { x: number; y: number },
-  step: number,
-): number {
-  const maxX = workArea.x + workArea.width - bounds.width;
-  if (
-    maxX < workArea.x ||
-    bounds.y < workArea.y ||
-    bounds.y + bounds.height > workArea.y + workArea.height
-  )
-    return bounds.x;
+export function chooseAutoWalkTarget(
+  bounds: OverlayBounds & OverlayPosition,
+  workArea: OverlayBounds & OverlayPosition,
+  random = Math.random,
+): OverlayPosition {
+  const width = Math.max(0, workArea.width - bounds.width);
+  const height = Math.max(0, workArea.height - bounds.height);
+  const leftHalf = bounds.x <= workArea.x + width / 2;
+  // Cross into the opposite side before picking another destination.
+  const x = (leftHalf ? 0.67 : 0.08) + random() * 0.25;
+  let y = 0.1 + random() * 0.8;
+  const currentY = height > 0 ? (bounds.y - workArea.y) / height : 0;
+  if (Math.abs(currentY - y) < 0.15) y = ((y + 0.4) % 0.8) + 0.1;
+  return {
+    x: workArea.x + Math.round(width * x),
+    y: workArea.y + Math.round(height * y),
+  };
+}
 
-  return Math.min(maxX, Math.max(workArea.x, bounds.x + step));
+export function stepTowardAutoWalkTarget(
+  position: OverlayPosition,
+  target: OverlayPosition,
+  step: number,
+): OverlayPosition {
+  const x = target.x - position.x;
+  const y = target.y - position.y;
+  const distance = Math.hypot(x, y);
+  if (distance <= step) return target;
+  return {
+    x: position.x + Math.round((x * step) / distance),
+    y: position.y + Math.round((y * step) / distance),
+  };
 }
 
 export function resolveOverlayScaleFromWidth(width: number): number {

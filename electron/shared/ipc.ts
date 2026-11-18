@@ -47,13 +47,12 @@ export const overlayResizeRequestSchema = z.object({
 });
 
 export const overlayMoveRequestSchema = z.object({
-  deltaX: z.number(),
-  deltaY: z.number(),
+  x: z.number().finite(),
+  y: z.number().finite(),
 });
 
 export const autoWalkSettingSchema = z.boolean();
-export const autoWalkDirectionSchema = z.enum(["run-left", "run-right"]);
-export type AutoWalkDirection = z.infer<typeof autoWalkDirectionSchema>;
+export type AutoWalkDirection = "run-left" | "run-right";
 
 export const overlayAnimationRequestSchema = z.object({
   state: z.enum(petAnimationStates),
@@ -83,7 +82,7 @@ export const petChannels = {
   openUpdateDownload: "pet:open-update-download",
   setOverlayScale: "pet:set-overlay-scale",
   resizeOverlay: "pet:resize-overlay",
-  moveOverlay: "pet:move-overlay",
+  moveOverlayTo: "pet:move-overlay-to",
   setAutoWalk: "pet:set-auto-walk",
   stepAutoWalk: "pet:step-auto-walk",
   requestAnimation: "pet:request-animation",

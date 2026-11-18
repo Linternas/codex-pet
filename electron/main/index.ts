@@ -238,9 +238,9 @@ function schedulePlacementSave(patch: typeof placementToSave): void {
   placementTimer = setTimeout(savePlacement, 250);
 }
 
-function movePet(deltaX: number, deltaY: number): void {
+function movePet(x: number, y: number): void {
   if (preferences.clickThrough) return;
-  const position = overlayController.moveBy(deltaX, deltaY);
+  const position = overlayController.moveTo(x, y);
   if (position) schedulePlacementSave({ overlayPosition: position });
 }
 
@@ -355,9 +355,8 @@ registerPetIpcHandlers(ipcMain, {
   getState,
   installPet,
   setAutoWalk,
-  stepAutoWalk: (sender, direction) =>
-    preferences.autoWalk && overlayController.stepAutoWalk(sender, direction),
-  moveOverlay: movePet,
+  stepAutoWalk: (sender) => (preferences.autoWalk ? overlayController.stepAutoWalk(sender) : null),
+  moveOverlayTo: movePet,
   requestAnimation: (state) => overlayController.sendAnimation(state),
   refreshInstaller: async () => {
     await getInstallerStatus(true);
@@ -440,6 +439,7 @@ async function startApp(): Promise<void> {
     console.error("Codex Pet session receiver unavailable", error);
   }
   ipcMain.handle(agentSessionChannels.get, () => agentSessions);
+  ipcMain.handle(agentSessionChannels.connections, () => preferences.agentProviders);
   ipcMain.handle(agentSessionChannels.open, () => createWindow("sessions"));
   ipcMain.handle(agentSessionChannels.configure, async (event, payload: unknown) => {
     if (event.sender !== mainWindow?.webContents)

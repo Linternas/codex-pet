@@ -45,6 +45,7 @@ export const agentStatusLabels: Record<AgentSession["status"], string> = {
 
 export const agentSessionChannels = {
   get: "session:get",
+  connections: "session:connections",
   open: "session:open",
   showPage: "session:show-page",
   changed: "session:changed",

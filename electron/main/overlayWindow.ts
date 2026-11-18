@@ -5,9 +5,10 @@ import type { AutoWalkDirection, PetManagerState } from "../shared/ipc.js";
 import { petChannels } from "../shared/ipc.js";
 import {
   type OverlayPosition,
+  chooseAutoWalkTarget,
   clampOverlayPosition,
-  resolveAutoWalkX,
   resolveOverlayBounds,
+  stepTowardAutoWalkTarget,
 } from "../shared/overlay.js";
 import type { PetAnimationState } from "../shared/petAnimation.js";
 import { resolveRendererUrl } from "./rendererUrl.js";
@@ -27,11 +28,8 @@ export type OverlayWindowController = {
   readonly setClickThrough: (enabled: boolean) => void;
   readonly hide: () => void;
   readonly isVisible: () => boolean;
-  readonly moveBy: (deltaX: number, deltaY: number) => OverlayPosition | undefined;
-  readonly stepAutoWalk: (
-    sender: electronType.WebContents,
-    direction: AutoWalkDirection,
-  ) => boolean;
+  readonly moveTo: (x: number, y: number) => OverlayPosition | undefined;
+  readonly stepAutoWalk: (sender: electronType.WebContents) => AutoWalkDirection | null;
   readonly resize: (scale: number) => void;
   readonly sendAgentSessions: (sessions: readonly AgentSession[]) => void;
   readonly sendKeyboardActivity: () => void;
@@ -50,6 +48,8 @@ export function createOverlayWindowController({
   projectRoot,
 }: OverlayWindowOptions): OverlayWindowController {
   let overlayWindow: InstanceType<typeof BrowserWindow> | undefined;
+  let walkTarget: OverlayPosition | undefined;
+  let walkDirection: AutoWalkDirection = "run-right";
 
   function getWindow(): InstanceType<typeof BrowserWindow> | undefined {
     if (overlayWindow === undefined || overlayWindow.isDestroyed()) {
@@ -60,6 +60,7 @@ export function createOverlayWindowController({
   }
 
   function keepOnScreen(): void {
+    walkTarget = undefined;
     const window = getWindow();
     if (!window) return;
     const bounds = window.getBounds();
@@ -108,37 +109,47 @@ export function createOverlayWindowController({
       overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       overlayWindow.on("closed", () => {
         overlayWindow = undefined;
+        walkTarget = undefined;
       });
 
       await overlayWindow.loadURL(resolveRendererUrl(projectRoot, devServerUrl, "overlay"));
     },
     hide: () => {
+      walkTarget = undefined;
       getWindow()?.hide();
     },
     isVisible: () => getWindow()?.isVisible() ?? false,
-    moveBy: (deltaX, deltaY) => {
+    moveTo: (x, y) => {
+      walkTarget = undefined;
       const window = getWindow();
       if (window === undefined) {
         return;
       }
 
-      const position = window.getPosition();
-      const x = position[0] ?? 0;
-      const y = position[1] ?? 0;
-      window.setPosition(Math.round(x + deltaX), Math.round(y + deltaY), false);
+      window.setPosition(Math.round(x), Math.round(y), false);
       const { x: actualX, y: actualY } = window.getBounds();
       return { x: actualX, y: actualY };
     },
-    stepAutoWalk: (sender, direction) => {
+    stepAutoWalk: (sender) => {
       const window = getWindow();
-      if (!window?.isVisible() || sender !== window.webContents) return false;
+      if (!window?.isVisible() || sender !== window.webContents) return null;
 
       const bounds = window.getBounds();
       const { workArea } = screen.getDisplayMatching(bounds);
-      const x = resolveAutoWalkX(bounds, workArea, direction === "run-left" ? -2 : 2);
-      if (x === bounds.x) return false;
-      window.setPosition(x, bounds.y, false);
-      return true;
+      if (bounds.width > workArea.width || bounds.height > workArea.height) return null;
+      walkTarget ??= chooseAutoWalkTarget(bounds, workArea);
+      const step = Math.max(3, Math.min(7, workArea.width / 415));
+      const next = clampOverlayPosition(
+        { ...bounds, ...stepTowardAutoWalkTarget(bounds, walkTarget, step) },
+        workArea,
+      );
+      if (next.x === bounds.x && next.y === bounds.y) {
+        walkTarget = undefined;
+        return null;
+      }
+      window.setPosition(next.x, next.y, false);
+      if (next.x !== bounds.x) walkDirection = next.x < bounds.x ? "run-left" : "run-right";
+      return walkDirection;
     },
     resize: (scale) => {
       const bounds = resolveOverlayBounds(scale);

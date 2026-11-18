@@ -15,6 +15,7 @@ declare global {
     readonly codexPet?: {
       readonly openAgentSessions: () => Promise<void>;
       readonly onShowAgentSessions: (callback: () => void) => () => void;
+      readonly getAgentConnections: () => Promise<Record<AgentProvider, boolean>>;
       readonly getAgentSessions: () => Promise<readonly AgentSession[]>;
       readonly configureAgentHooks: (provider: AgentProvider, enabled: boolean) => Promise<void>;
       readonly onAgentSessions: (
@@ -40,8 +41,8 @@ declare global {
       readonly setOverlayScale: (scale: number) => Promise<PetManagerResult>;
       readonly resizeOverlay: (width: number) => Promise<PetManagerResult>;
       readonly setAutoWalk: (enabled: boolean) => Promise<PetManagerResult>;
-      readonly stepAutoWalk: (direction: AutoWalkDirection) => Promise<boolean>;
-      readonly moveOverlay: (deltaX: number, deltaY: number) => Promise<void>;
+      readonly stepAutoWalk: () => Promise<AutoWalkDirection | null>;
+      readonly moveOverlayTo: (x: number, y: number) => Promise<void>;
       readonly requestAnimation: (state: PetAnimationState) => Promise<void>;
       readonly onStateChanged: (callback: (state: PetManagerState) => void) => () => void;
       readonly onKeyboardActivity: (callback: () => void) => () => void;

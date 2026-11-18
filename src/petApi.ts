@@ -42,6 +42,7 @@ export function getPetApi(): PetApi {
   return {
     openAgentSessions: async () => undefined,
     onShowAgentSessions: () => () => undefined,
+    getAgentConnections: async () => ({ codex: false, claude: false }),
     getAgentSessions: async () => [],
     configureAgentHooks: async () => {
       throw new Error("macOS 앱에서 세션을 연결하세요.");
@@ -89,8 +90,8 @@ export function getPetApi(): PetApi {
       previewState.overlay.autoWalk = enabled;
       return ready(previewState);
     },
-    stepAutoWalk: async () => false,
-    moveOverlay: async () => undefined,
+    stepAutoWalk: async () => null,
+    moveOverlayTo: async () => undefined,
     requestAnimation: async () => undefined,
     onStateChanged: () => () => undefined,
     onKeyboardActivity: () => () => undefined,

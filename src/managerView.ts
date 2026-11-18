@@ -4,7 +4,6 @@ import type { UpdateCheckResult } from "../electron/shared/update.js";
 
 export type ManagerRefs = {
   readonly status: HTMLElement;
-  readonly versionInfo: HTMLElement;
   readonly animations: HTMLElement;
   readonly autoWalk: HTMLInputElement;
   readonly input: HTMLInputElement | null;
@@ -12,12 +11,8 @@ export type ManagerRefs = {
   readonly list: HTMLElement;
   readonly previewFrame: HTMLElement;
   readonly previewName: HTMLElement;
-  readonly previewDescription: HTMLElement;
   readonly previewLabel: HTMLElement;
-  readonly previewPath: HTMLElement;
   readonly installHelp: HTMLElement | null;
-  readonly homebrewCommand: HTMLElement | null;
-  readonly nodeCommand: HTMLElement | null;
   readonly updateDownloadButton?: HTMLButtonElement;
   readonly updateStatus?: HTMLElement;
 };
@@ -63,28 +58,19 @@ function setSpriteFrame(element: HTMLElement, spriteUrl: string, version = 1): v
 export function renderPreview(
   refs: ManagerRefs,
   pet: PetManagerState["pets"][number] | undefined,
-  label: string,
+  previewing: boolean,
 ): void {
-  refs.previewLabel.textContent = label;
+  refs.previewLabel.hidden = !previewing;
   if (pet === undefined) {
     refs.previewFrame.style.backgroundImage = "";
     refs.previewFrame.removeAttribute("aria-label");
-    refs.previewName.textContent = "선택 없음";
-    refs.previewDescription.textContent = "적용할 에셋을 추가하세요.";
-    refs.previewPath.textContent = "";
-    refs.versionInfo.textContent = "v1: 기본 9개 동작 / v2: 9개 동작 + 16방향 시선";
+    refs.previewName.textContent = "선택한 캐릭터 없음";
     return;
   }
 
   setSpriteFrame(refs.previewFrame, pet.spriteUrl, pet.manifest.spriteVersionNumber);
   refs.previewFrame.setAttribute("aria-label", pet.manifest.displayName);
   refs.previewName.textContent = pet.manifest.displayName;
-  refs.previewDescription.textContent = pet.manifest.description;
-  refs.previewPath.textContent = pet.manifest.id;
-  refs.versionInfo.textContent =
-    pet.manifest.spriteVersionNumber === 2
-      ? "v2 · 8×11 시트 · 기본 9개 동작 + 16방향 시선"
-      : "v1 · 8×9 시트 · 기본 9개 동작 (방향별 시선 없음)";
 }
 
 export function createPetCard(options: PetCardOptions): HTMLElement {
@@ -130,6 +116,9 @@ export function createPetCard(options: PetCardOptions): HTMLElement {
   version.textContent = `v${pet.manifest.spriteVersionNumber ?? 1}`;
   version.title =
     pet.manifest.spriteVersionNumber === 2 ? "9개 동작 + 16방향 시선" : "9개 기본 동작";
+  const heading = document.createElement("div");
+  heading.className = "asset-card-heading";
+  heading.append(name, version);
   const actions = document.createElement("div");
   actions.className = "asset-actions";
 
@@ -151,7 +140,7 @@ export function createPetCard(options: PetCardOptions): HTMLElement {
   });
 
   actions.append(applyButton, deleteButton);
-  body.append(name, version, id, actions);
+  body.append(heading, id, actions);
   card.append(image, body);
   return card;
 }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSession } from "../electron/shared/agentSessions.js";
-import type { PetManagerState } from "../electron/shared/ipc.js";
+import type { AutoWalkDirection, PetManagerState } from "../electron/shared/ipc.js";
 import type { PetAnimationState } from "../electron/shared/petAnimation.js";
 
 vi.mock("../src/frameDetection.js", () => ({
@@ -15,7 +15,8 @@ let now: number;
 let publishState: (state: PetManagerState) => void;
 let publishSessions: (sessions: readonly AgentSession[]) => void;
 let overlayState: PetManagerState;
-const stepAutoWalk = vi.fn(async () => true);
+const stepAutoWalk = vi.fn(async (): Promise<AutoWalkDirection | null> => "run-right");
+const moveOverlayTo = vi.fn(async () => undefined);
 const openAgentSessions = vi.fn(async () => undefined);
 function advance(milliseconds: number) {
   now += milliseconds;
@@ -27,7 +28,7 @@ function state() {
 beforeEach(async () => {
   vi.resetModules();
   now = 100_000;
-  stepAutoWalk.mockReset().mockResolvedValue(true);
+  stepAutoWalk.mockReset().mockResolvedValue("run-right");
   overlayState = {
     appliedPetId: "test",
     overlay: { autoWalk: false, visible: true, scale: 0.65, clickThrough: false },
@@ -68,6 +69,7 @@ beforeEach(async () => {
         publishSessions = callback;
       },
       openAgentSessions,
+      moveOverlayTo,
       stepAutoWalk,
     },
   });
@@ -197,6 +199,32 @@ describe("desktop session card", () => {
   });
 });
 
+it("keeps the drag offset even while macOS clamps the overlay to the menu bar", () => {
+  const shell = document.querySelector<HTMLElement>(".overlay-shell");
+  if (!shell) throw new Error("Missing overlay");
+  Object.defineProperty(shell, "setPointerCapture", { value: vi.fn() });
+  vi.stubGlobal("screenX", 500);
+  vi.stubGlobal("screenY", 35);
+  const drag = (type: string, screenY: number) => {
+    const event = new MouseEvent(type, { screenX: 540, screenY, bubbles: true });
+    Object.defineProperty(event, "pointerId", { value: 1 });
+    shell.dispatchEvent(event);
+  };
+
+  drag("pointerdown", 75);
+  drag("pointermove", 65);
+  vi.stubGlobal("screenY", 25);
+  drag("pointermove", 61);
+  drag("pointermove", 20);
+  drag("pointerup", 20);
+
+  expect(moveOverlayTo.mock.calls).toEqual([
+    [500, 25],
+    [500, 21],
+    [500, -20],
+  ]);
+});
+
 describe("auto walk", () => {
   async function advanceWalk(ms: number) {
     advance(ms);
@@ -205,23 +233,24 @@ describe("auto walk", () => {
     await Promise.resolve();
   }
 
-  it("opts in, rests and reverses at an edge, and pauses for keyboard activity", async () => {
+  it("opts in, adds an occasional resting gesture, then pauses for keyboard activity", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.4);
     await advanceWalk(10_000);
     expect(stepAutoWalk).not.toHaveBeenCalled();
 
     overlayState.overlay.autoWalk = true;
     publishState(overlayState);
-    await advanceWalk(5_000);
-    expect(stepAutoWalk).toHaveBeenLastCalledWith("run-right");
+    await advanceWalk(2_500);
+    expect(stepAutoWalk).toHaveBeenCalledOnce();
     expect(state()).toBe("run-right");
 
-    stepAutoWalk.mockResolvedValueOnce(false);
+    stepAutoWalk.mockResolvedValueOnce(null);
     await advanceWalk(32);
-    expect(state()).toBe("idle");
-    await advanceWalk(4_999);
+    expect(state()).toBe("jumping");
+    await advanceWalk(2_159);
     expect(stepAutoWalk).toHaveBeenCalledTimes(2);
+    stepAutoWalk.mockResolvedValueOnce("run-left");
     await advanceWalk(1);
-    expect(stepAutoWalk).toHaveBeenLastCalledWith("run-left");
     expect(state()).toBe("run-left");
 
     key();

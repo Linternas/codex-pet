@@ -7,7 +7,6 @@ import {
   type PetIdRequest,
   type PetManagerResult,
   type PetManagerState,
-  autoWalkDirectionSchema,
   autoWalkSettingSchema,
   installPetRequestSchema,
   overlayAnimationRequestSchema,
@@ -26,8 +25,8 @@ type PetIpcHandlers = {
   readonly getState: () => Promise<PetManagerState>;
   readonly installPet: (request: InstallPetRequest) => Promise<PetManagerResult>;
   readonly setAutoWalk: (enabled: boolean) => Promise<PetManagerResult>;
-  readonly stepAutoWalk: (sender: Electron.WebContents, direction: AutoWalkDirection) => boolean;
-  readonly moveOverlay: (deltaX: number, deltaY: number) => void;
+  readonly stepAutoWalk: (sender: Electron.WebContents) => AutoWalkDirection | null;
+  readonly moveOverlayTo: (x: number, y: number) => void;
   readonly requestAnimation: (state: PetAnimationState) => void;
   readonly resizeOverlay: (request: OverlayResizeRequest) => Promise<PetManagerResult>;
   readonly setOverlayScale: (request: OverlayScaleRequest) => Promise<PetManagerResult>;
@@ -100,9 +99,9 @@ export function registerPetIpcHandlers(ipcMain: IpcMain, handlers: PetIpcHandler
     },
   );
 
-  ipcMain.handle(petChannels.moveOverlay, (_event, payload: unknown): void => {
-    const { deltaX, deltaY } = parseRequest(overlayMoveRequestSchema, payload);
-    handlers.moveOverlay(deltaX, deltaY);
+  ipcMain.handle(petChannels.moveOverlayTo, (_event, payload: unknown): void => {
+    const { x, y } = parseRequest(overlayMoveRequestSchema, payload);
+    handlers.moveOverlayTo(x, y);
   });
 
   ipcMain.handle(petChannels.setAutoWalk, async (_event, enabled: unknown) => {
@@ -113,9 +112,7 @@ export function registerPetIpcHandlers(ipcMain: IpcMain, handlers: PetIpcHandler
     }
   });
 
-  ipcMain.handle(petChannels.stepAutoWalk, (event, direction: unknown) =>
-    handlers.stepAutoWalk(event.sender, autoWalkDirectionSchema.parse(direction)),
-  );
+  ipcMain.handle(petChannels.stepAutoWalk, (event) => handlers.stepAutoWalk(event.sender));
 
   ipcMain.handle(petChannels.requestAnimation, (_event, payload: unknown): void => {
     const { state } = parseRequest(overlayAnimationRequestSchema, payload);

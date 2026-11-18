@@ -82,13 +82,14 @@ beforeEach(() => {
       state.overlay.autoWalk = enabled;
       return { kind: "ready", state };
     }),
-    stepAutoWalk: vi.fn(async () => false),
+    stepAutoWalk: vi.fn(async () => null),
     onShowAgentSessions: vi.fn(() => () => undefined),
     openAgentSessions: vi.fn(async () => undefined),
+    getAgentConnections: vi.fn(async () => ({ codex: false, claude: false })),
     getAgentSessions: vi.fn(async () => []),
     onAgentSessions: vi.fn(() => () => undefined),
     configureAgentHooks: vi.fn(async () => undefined),
-    moveOverlay: vi.fn(async () => undefined),
+    moveOverlayTo: vi.fn(async () => undefined),
     getAccessibilityPermission: vi.fn(async () => true),
     openAccessibilitySettings: vi.fn(async () => undefined),
     checkForUpdate: vi.fn(async () => ({
@@ -139,7 +140,7 @@ describe("pet manager user flows", () => {
     expect(document.querySelector<HTMLElement>(".card-sprite")?.style.backgroundSize).toBe(
       "800% 1100%",
     );
-    expect(document.querySelector("[data-version-info]")?.textContent).toContain("16방향");
+    expect(document.querySelector(".version-badge")?.getAttribute("title")).toContain("16방향");
     expect(input.value).toBe("");
     button(".danger-button").click();
     await settle();
@@ -266,9 +267,16 @@ describe("onboarding and history pages", () => {
     expect(document.querySelector<HTMLElement>("#page-permissions")?.hidden).toBe(true);
     expect(sessionsTab.getAttribute("aria-current")).toBe("page");
     expect(document.activeElement?.id).toBe("sessions-heading");
-    button("[data-connect=codex]").click();
+    const connection = button("[data-session-action=codex]");
+    expect(connection.textContent).toBe("연결");
+    connection.click();
     expect(api.configureAgentHooks).toHaveBeenCalledWith("codex", true);
     await settle();
+    expect(connection.textContent).toBe("연결 해제");
+    connection.click();
+    expect(api.configureAgentHooks).toHaveBeenCalledWith("codex", false);
+    await settle();
+    expect(connection.textContent).toBe("연결");
 
     button('[data-page="pets"]').click();
     expect(sessionsPage?.hidden).toBe(true);
@@ -279,7 +287,7 @@ describe("onboarding and history pages", () => {
     expect(document.querySelector<HTMLElement>("#page-permissions")?.hidden).toBe(false);
     expect(document.querySelector<HTMLElement>("#page-pets")?.hidden).toBe(true);
     expect(api.getReleaseHistory).not.toHaveBeenCalled();
-    expect(document.querySelectorAll(".permission-steps li")).toHaveLength(3);
+    expect(document.querySelectorAll(".permission-steps li")).toHaveLength(2);
     expect(document.querySelector(".manager-navigation .asset-help a")?.getAttribute("href")).toBe(
       "https://codex-pets.net",
     );

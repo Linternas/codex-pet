@@ -76,11 +76,8 @@ const codexPetApi = {
     petManagerResultSchema.parse(await ipcRenderer.invoke(petChannels.setOverlayScale, { scale })),
   resizeOverlay: async (width: number) =>
     petManagerResultSchema.parse(await ipcRenderer.invoke(petChannels.resizeOverlay, { width })),
-  moveOverlay: async (deltaX: number, deltaY: number) => {
-    await ipcRenderer.invoke(
-      petChannels.moveOverlay,
-      overlayMoveRequestSchema.parse({ deltaX, deltaY }),
-    );
+  moveOverlayTo: async (x: number, y: number) => {
+    await ipcRenderer.invoke(petChannels.moveOverlayTo, overlayMoveRequestSchema.parse({ x, y }));
   },
   requestAnimation: async (state: unknown) => {
     await ipcRenderer.invoke(

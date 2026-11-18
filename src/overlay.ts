@@ -4,7 +4,7 @@ import {
   agentProviderLabels,
   agentStatusLabels,
 } from "../electron/shared/agentSessions.js";
-import type { AutoWalkDirection, PetManagerState } from "../electron/shared/ipc.js";
+import type { PetManagerState } from "../electron/shared/ipc.js";
 import {
   type KeyboardAnimationActivity,
   recordKeyboardActivity,
@@ -47,13 +47,15 @@ type DragSession = {
   readonly pointerId: number;
   readonly screenX: number;
   readonly screenY: number;
+  readonly offsetX: number;
+  readonly offsetY: number;
 };
 
 type AnimationRuntime = {
   autoWalk: boolean;
   clickThrough: boolean;
   agentState: "review" | "running" | null;
-  walkState: AutoWalkDirection | null;
+  walkState: PetAnimationState | null;
   keyboard: KeyboardAnimationActivity;
   column: number;
   version: number;
@@ -208,13 +210,11 @@ function requestAnimation(
   paint(refs, runtime, now);
 }
 
-const walkDurationMs = 3_000;
-const walkRestMs = 5_000;
+const walkResumeMs = 2_500;
 const walkStepMs = 32;
 
 function bindAnimationTimers(refs: OverlayRefs, runtime: AnimationRuntime): void {
-  let direction: AutoWalkDirection = "run-right";
-  let nextWalkAt = Date.now() + walkRestMs;
+  let nextWalkAt = Date.now() + walkResumeMs;
   let walkUntil = 0;
   let nextStepAt = 0;
   let stepping = false;
@@ -233,33 +233,38 @@ function bindAnimationTimers(refs: OverlayRefs, runtime: AnimationRuntime): void
     );
   }
 
-  function rest(now: number): void {
+  function rest(now: number, afterWalking = false): void {
     walkUntil = 0;
     runtime.walkState = null;
-    nextWalkAt = now + walkRestMs;
+    nextWalkAt = now + walkResumeMs;
+    if (afterWalking) {
+      const choice = Math.random();
+      runtime.walkState = choice < 0.3 ? "waving" : choice < 0.6 ? "jumping" : null;
+      nextWalkAt = now + 1_600 + Math.random() * 1_400;
+    }
   }
 
   function tickWalk(now: number): void {
-    if (!canWalk(now) || (walkUntil > 0 && now >= walkUntil)) {
+    if (!canWalk(now)) {
       rest(now);
+      return;
+    }
+    if (walkUntil > 0 && now >= walkUntil) {
+      rest(now, true);
       return;
     }
     if (stepping || now < nextWalkAt || now < nextStepAt) return;
 
-    if (walkUntil === 0) walkUntil = now + walkDurationMs;
+    if (walkUntil === 0) walkUntil = now + 3_500 + Math.random() * 3_000;
     nextStepAt = now + walkStepMs;
     stepping = true;
     void api
-      .stepAutoWalk(direction)
-      .then((moved) => {
+      .stepAutoWalk()
+      .then((direction) => {
         const completedAt = Date.now();
         if (!canWalk(completedAt) || walkUntil === 0) return;
-        if (moved) {
-          runtime.walkState = direction;
-        } else {
-          direction = direction === "run-right" ? "run-left" : "run-right";
-          rest(completedAt);
-        }
+        if (direction) runtime.walkState = direction;
+        else rest(completedAt, true);
         paint(refs, runtime, completedAt);
       })
       .catch(() => rest(Date.now()))
@@ -348,6 +353,8 @@ function bindDrag(refs: OverlayRefs, runtime: AnimationRuntime): void {
       pointerId: event.pointerId,
       screenX: event.screenX,
       screenY: event.screenY,
+      offsetX: window.screenX - event.screenX,
+      offsetY: window.screenY - event.screenY,
     };
   });
 
@@ -359,7 +366,7 @@ function bindDrag(refs: OverlayRefs, runtime: AnimationRuntime): void {
     const deltaX = event.screenX - dragSession.screenX;
     const deltaY = event.screenY - dragSession.screenY;
     dragSession = {
-      pointerId: event.pointerId,
+      ...dragSession,
       screenX: event.screenX,
       screenY: event.screenY,
     };
@@ -371,7 +378,11 @@ function bindDrag(refs: OverlayRefs, runtime: AnimationRuntime): void {
     distance += Math.abs(deltaX) + Math.abs(deltaY);
     runtime.lastActivityAt = Date.now();
     runtime.dragState = resolveDragAnimationState(deltaX);
-    void api.moveOverlay(deltaX, deltaY);
+    // macOS can clamp intermediate positions at the menu bar on the way to another display.
+    void api.moveOverlayTo(
+      event.screenX + dragSession.offsetX,
+      event.screenY + dragSession.offsetY,
+    );
     paint(refs, runtime);
   });
 

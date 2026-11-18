@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("codexPet", {
     ipcRenderer.on("session:show-page", listener);
     return () => ipcRenderer.removeListener("session:show-page", listener);
   },
+  getAgentConnections: () => ipcRenderer.invoke("session:connections"),
   getAgentSessions: () => ipcRenderer.invoke("session:get"),
   configureAgentHooks: (provider, enabled) =>
     ipcRenderer.invoke("session:configure", { provider, enabled }),
@@ -40,8 +41,8 @@ contextBridge.exposeInMainWorld("codexPet", {
   setOverlayScale: (scale) => ipcRenderer.invoke("pet:set-overlay-scale", { scale }),
   resizeOverlay: (width) => ipcRenderer.invoke("pet:resize-overlay", { width }),
   setAutoWalk: (enabled) => ipcRenderer.invoke("pet:set-auto-walk", enabled),
-  stepAutoWalk: (direction) => ipcRenderer.invoke("pet:step-auto-walk", direction),
-  moveOverlay: (deltaX, deltaY) => ipcRenderer.invoke("pet:move-overlay", { deltaX, deltaY }),
+  stepAutoWalk: () => ipcRenderer.invoke("pet:step-auto-walk"),
+  moveOverlayTo: (x, y) => ipcRenderer.invoke("pet:move-overlay-to", { x, y }),
   requestAnimation: (state) => ipcRenderer.invoke("pet:request-animation", { state }),
   onStateChanged: (callback) => {
     const listener = (_event, state) => callback(state);

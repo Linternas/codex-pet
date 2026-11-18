@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  chooseAutoWalkTarget,
   clampOverlayPosition,
   clampOverlayScale,
   overlayDefaults,
-  resolveAutoWalkX,
   resolveOverlayBounds,
   resolveOverlayScaleFromWidth,
+  stepTowardAutoWalkTarget,
 } from "../electron/shared/overlay.js";
 import {
   animationTiming,
@@ -75,15 +76,23 @@ describe("overlay sizing", () => {
   });
 });
 
-it("limits walking to the current display's usable area, including negative coordinates", () => {
-  const workArea = { x: -1200, y: 24, width: 1100, height: 800 };
-  const bounds = { x: -1200, y: 300, width: 200, height: 240 };
+it("randomizes destinations across opposite sides and draws a bounded diagonal path", () => {
+  const workArea = { x: -1200, y: -800, width: 1100, height: 800 };
+  const start = { x: -1050, y: -520, width: 200, height: 240 };
+  const first = chooseAutoWalkTarget(start, workArea, () => 0.5);
+  const varied = chooseAutoWalkTarget(start, workArea, () => 0.99);
+  const second = chooseAutoWalkTarget({ ...start, ...first }, workArea, () => 0.5);
+  expect(first.x).toBeGreaterThan(-600);
+  expect(second.x).toBeLessThan(-900);
+  expect(first).not.toEqual(varied);
+  expect(Math.abs(first.y - start.y)).toBeGreaterThan(80);
+  expect(clampOverlayPosition({ ...start, ...first }, workArea)).toEqual(first);
 
-  expect(resolveAutoWalkX(bounds, workArea, -2)).toBe(-1200);
-  expect(resolveAutoWalkX(bounds, workArea, 2)).toBe(-1198);
-  expect(resolveAutoWalkX({ ...bounds, x: -301 }, workArea, 2)).toBe(-300);
-  expect(resolveAutoWalkX({ ...bounds, x: -300 }, workArea, 2)).toBe(-300);
-  expect(resolveAutoWalkX({ ...bounds, y: 600 }, workArea, 2)).toBe(-1200);
+  const step = stepTowardAutoWalkTarget(start, first, 4);
+  expect(step.x).toBeGreaterThan(start.x);
+  expect(step.y).toBeLessThan(start.y);
+  expect(clampOverlayPosition({ ...start, ...step }, workArea)).toEqual(step);
+  expect(stepTowardAutoWalkTarget(first, first, 4)).toEqual(first);
 });
 
 it("returns a saved overlay to the selected display after a monitor disappears", () => {

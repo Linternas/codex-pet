@@ -44,16 +44,9 @@ function renderState(refs: ManagerRefs, runtime: ManagerRuntime, state: PetManag
   const previewPet = state.pets.find((pet) => pet.manifest.id === runtime.previewPetId);
   const displayPet = previewPet ?? appliedPet;
   const isPreviewing = previewPet !== undefined && previewPet.manifest.id !== state.appliedPetId;
-  renderPreview(refs, displayPet, isPreviewing ? "Preview Asset" : "Applied Asset");
+  renderPreview(refs, displayPet, isPreviewing);
 
-  if (!runtime.busy && displayPet !== undefined) {
-    setStatus(refs, state.overlay.visible ? "적용됨" : "준비됨");
-    if (isPreviewing) {
-      setStatus(refs, "미리보기 중");
-    }
-  } else if (!runtime.busy) {
-    setStatus(refs, "에셋 없음");
-  }
+  if (!runtime.busy) setStatus(refs, "");
 
   if (runtime.busy) return;
 
@@ -106,41 +99,35 @@ function renderInstallerState(
   if (refs.installHelp !== null) {
     refs.installHelp.hidden = false;
   }
-  if (refs.homebrewCommand !== null) {
-    refs.homebrewCommand.textContent = state.installer.instructions?.homebrewInstallCommand ?? "";
-  }
-  if (refs.nodeCommand !== null) {
-    refs.nodeCommand.textContent = state.installer.instructions?.nodeInstallCommand ?? "";
-  }
 }
 
 export function renderManager(root: HTMLElement): void {
   document.documentElement.classList.remove("overlay-mode");
   root.innerHTML = `
     <main class="manager-shell">
-      <section class="manager-panel">
+      <section class="manager-panel" aria-label="캐릭터 목록">
         <form class="add-row" data-add-form>
           <input data-pet-id-input placeholder="frieren-full" aria-label="Pet ID" disabled />
           <button type="submit" data-add-button disabled>다운로드</button>
         </form>
 
+        <p class="status" data-status role="status" aria-live="polite">불러오는 중…</p>
         <div class="asset-list" data-asset-list></div>
-
-        <p class="status" data-status role="status" aria-live="polite">상태 확인 중</p>
       </section>
       <section class="preview-panel">
         <div class="preview-artboard">
           <div data-preview-frame class="sprite-frame preview-sprite" role="img"></div>
         </div>
         <div class="preview-meta">
-          <p class="path-label" data-preview-label>Applied Asset</p>
-          <h2 data-preview-name>선택 없음</h2>
-          <p data-preview-description>적용할 에셋을 추가하세요.</p>
-          <p class="asset-path" data-preview-path></p>
-          <p class="version-info" data-version-info></p>
+          <div class="preview-heading">
+            <h2 data-preview-name>선택한 캐릭터 없음</h2>
+            <span class="preview-marker" data-preview-label hidden>미리보기</span>
+          </div>
           <label class="auto-walk-setting"><input type="checkbox" data-auto-walk disabled /> 자동 산책</label>
-          <div class="animation-controls" data-animations aria-label="적용된 캐릭터 동작"></div>
-          <p class="interaction-help">동작 버튼은 적용된 캐릭터에 반영됩니다. 타이핑: 인사 → 작업 → 검토 → 휴식 / 클릭: 인사 / 더블클릭: 점프 / 드래그: 달리기 / 30초간 반응 없음: 대기. v2는 캐릭터 위 마우스 방향을 바라봅니다.</p>
+          <details class="character-actions">
+            <summary>적용된 캐릭터 동작</summary>
+            <div class="animation-controls" data-animations aria-label="적용된 캐릭터 동작"></div>
+          </details>
         </div>
       </section>
     </main>
@@ -150,7 +137,6 @@ export function renderManager(root: HTMLElement): void {
 
   const refs: ManagerRefs = {
     status: query(root, "[data-status]"),
-    versionInfo: query(root, "[data-version-info]"),
     animations: query(root, "[data-animations]"),
     autoWalk: query(root, "[data-auto-walk]"),
     input: queryOptional(root, "[data-pet-id-input]"),
@@ -158,12 +144,8 @@ export function renderManager(root: HTMLElement): void {
     list: query(root, "[data-asset-list]"),
     previewFrame: query(root, "[data-preview-frame]"),
     previewName: query(root, "[data-preview-name]"),
-    previewDescription: query(root, "[data-preview-description]"),
     previewLabel: query(root, "[data-preview-label]"),
-    previewPath: query(root, "[data-preview-path]"),
     installHelp: queryOptional(root, "[data-install-help]"),
-    homebrewCommand: queryOptional(root, "[data-homebrew-command]"),
-    nodeCommand: queryOptional(root, "[data-node-command]"),
   };
   const runtime: ManagerRuntime = {
     previewPetId: null,

@@ -1,4 +1,5 @@
 import {
+  type AgentProvider,
   type AgentSession,
   agentProviderLabels,
   agentProviderSchema,
@@ -14,45 +15,76 @@ export function mountAgentSessionsPage(api: NonNullable<Window["codexPet"]>): HT
   page.innerHTML = `
     <div class="page-content">
       <h2 id="sessions-heading" tabindex="-1">작업 세션</h2>
-      <p class="page-intro">연결한 Codex·Claude Code의 최근 프롬프트 일부와 상태를 앱이 열린 동안 이 Mac에서 표시합니다.</p>
-      <div class="page-actions">
-        <button type="button" data-connect="codex">Codex 연결</button>
-        <button type="button" data-disconnect="codex">Codex 연결 해제</button>
-        <button type="button" data-connect="claude">Claude Code 연결</button>
-        <button type="button" data-disconnect="claude">Claude Code 연결 해제</button>
+      <div class="settings-card session-connections" aria-label="도구 연결">
+        <div class="connection-row">
+          <div><strong>Codex</strong><span data-connection-state="codex"></span></div>
+          <button type="button" data-session-action="codex" disabled>연결</button>
+        </div>
+        <div class="connection-row">
+          <div><strong>Claude Code</strong><span data-connection-state="claude"></span></div>
+          <button type="button" data-session-action="claude" disabled>연결</button>
+        </div>
+        <p class="connection-note">요청 일부는 이 Mac에서만 표시됩니다.</p>
       </div>
       <p class="page-feedback" data-session-feedback role="status" aria-live="polite"></p>
-      <p data-sessions-empty>수신한 세션이 없습니다. 연결한 도구에서 세션을 열고 프롬프트를 보내세요.</p>
+      <p class="session-empty" data-sessions-empty>수신한 세션이 없습니다.</p>
       <div class="release-history" data-agent-sessions></div>
     </div>
   `;
   const feedback = query<HTMLElement>(page, "[data-session-feedback]");
   const empty = query<HTMLElement>(page, "[data-sessions-empty]");
   const list = query<HTMLElement>(page, "[data-agent-sessions]");
-  const buttons = Array.from(page.querySelectorAll<HTMLButtonElement>(".page-actions button"));
+  const buttons = Array.from(page.querySelectorAll<HTMLButtonElement>("[data-session-action]"));
+  let connections: Record<AgentProvider, boolean> | undefined;
+  let busy = false;
+
+  function renderConnections(): void {
+    for (const button of buttons) {
+      const provider = agentProviderSchema.parse(button.getAttribute("data-session-action"));
+      const connected = connections?.[provider];
+      const label = connected ? "연결 해제" : "연결";
+      query<HTMLElement>(page, `[data-connection-state="${provider}"]`).textContent =
+        connected === undefined ? "" : connected ? "연결됨" : "미연결";
+      button.disabled = busy || connected === undefined;
+      button.textContent = label;
+      button.setAttribute("aria-label", `${agentProviderLabels[provider]} ${label}`);
+    }
+  }
+
+  async function loadConnections(): Promise<void> {
+    connections = await api.getAgentConnections();
+    renderConnections();
+  }
+
   for (const button of buttons) {
     button.addEventListener("click", async () => {
-      const provider = agentProviderSchema.parse(
-        button.getAttribute("data-connect") ?? button.getAttribute("data-disconnect"),
-      );
-      const enabled = button.hasAttribute("data-connect");
-      for (const action of buttons) action.disabled = true;
+      if (busy || !connections) return;
+      const provider = agentProviderSchema.parse(button.getAttribute("data-session-action"));
+      const enabled = !connections[provider];
+      busy = true;
+      renderConnections();
       feedback.textContent = "";
       try {
         await api.configureAgentHooks(provider, enabled);
+        connections = { ...connections, [provider]: enabled };
         feedback.textContent = enabled
           ? provider === "codex"
-            ? "Codex의 새 세션에서 /hooks로 추가된 훅을 신뢰한 뒤 사용하세요."
-            : "Claude Code의 새 세션에서 훅이 적용됩니다."
-          : `${agentProviderLabels[provider]} 연결을 해제했습니다. 열려 있는 세션을 다시 시작하면 훅 설정이 갱신됩니다.`;
+            ? "Codex 새 세션의 /hooks에서 Codex Pet 훅을 신뢰하세요."
+            : "Claude Code 새 세션에서 작업을 시작하세요."
+          : "";
       } catch (error) {
+        await loadConnections().catch(() => undefined);
         feedback.textContent =
-          error instanceof Error ? error.message : "훅 설정을 변경하지 못했습니다.";
+          error instanceof Error ? error.message : "연결 상태를 변경하지 못했습니다.";
       } finally {
-        for (const action of buttons) action.disabled = false;
+        busy = false;
+        renderConnections();
       }
     });
   }
+  void loadConnections().catch(() => {
+    feedback.textContent = "연결 상태를 불러오지 못했습니다.";
+  });
 
   function render(sessions: readonly AgentSession[]): void {
     empty.hidden = sessions.length > 0;

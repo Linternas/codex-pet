@@ -1,5 +1,5 @@
 import { BookOpen, History, PawPrint, Terminal, createElement } from "lucide";
-import currentReleaseNotes from "../docs/releases/v0.0.8.md?raw";
+import currentReleaseNotes from "../docs/releases/v0.0.9.md?raw";
 import { appMetadata, formatVersionTag } from "../electron/shared/release.js";
 import type { ReleaseHistoryEntry } from "../electron/shared/releaseHistory.js";
 import { mountAgentSessionsPage } from "./agentSessionsView.js";
@@ -38,12 +38,9 @@ export function mountManagerPages(root: HTMLElement): void {
   navigation.className = "manager-navigation";
   navigation.setAttribute("aria-label", "앱 메뉴");
   navigation.innerHTML = `
-    <span class="navigation-brand">Codex Pet
-
-          <p class="app-version" data-app-version>${formatVersionTag(appMetadata.version)}</p>
-    </span>
+    <span class="navigation-brand">Codex Pet</span>
     <div class="asset-help navigation-catalog">
-      <a href="https://codex-pets.net" target="_blank" rel="noreferrer">codex-pets.net에서 캐릭터 찾기</a>
+      <a href="https://codex-pets.net" target="_blank" rel="noreferrer">캐릭터 찾기 ↗</a>
     </div>
     <button type="button" data-page="pets" aria-controls="page-pets">캐릭터</button>
     <button type="button" data-page="sessions" aria-controls="page-sessions">작업 세션</button>
@@ -116,23 +113,15 @@ export function mountManagerPages(root: HTMLElement): void {
   permissionsPage.setAttribute("aria-labelledby", "permissions-heading");
   permissionsPage.innerHTML = `
     <div class="page-content">
-      <h2 id="permissions-heading" tabindex="-1">키보드에 반응하도록 설정하기</h2>
-      <p class="page-intro">다른 앱에서 키보드를 누를 때 캐릭터가 인사하려면 macOS의 손쉬운 사용 권한이 필요합니다. 입력한 글자는 저장하지 않습니다.</p>
-      <div class="guide-note">권한을 설정하지 않아도 캐릭터 표시, 클릭, 드래그와 동작 버튼은 사용할 수 있습니다.</div>
-      <ol class="permission-steps">
-        <li><h3>시스템 설정 열기</h3>
-          <p><strong>시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용</strong>으로 이동하세요.</p>
-          <button type="button" data-guide-open-settings>손쉬운 사용 설정 열기</button>
-        </li>
-        <li><h3>Codex Pet 권한 켜기</h3>
-          <p>목록에서 <strong>Codex Pet</strong> 옆 스위치를 켜세요.</p>
-          <p class="step-detail">목록에 없다면 아래 <strong>+</strong>를 눌러 설치한 <strong>Codex Pet.app</strong>을 추가하세요.</p>
-        </li>
-        <li><h3>캐릭터 반응 확인하기</h3>
-          <p>앱으로 돌아와 캐릭터를 적용하고 메모 앱 등에서 글자를 입력하세요. 캐릭터가 인사하면 설정이 완료된 것입니다.</p>
-          <p class="step-detail">반응이 없으면 권한 스위치를 확인하고 상단 상태바 메뉴에서 앱을 종료한 뒤 다시 실행하세요.</p>
-        </li>
-      </ol>
+      <h2 id="permissions-heading" tabindex="-1">키보드 반응 권한</h2>
+      <div class="settings-card">
+        <p class="page-intro">다른 앱에서 타이핑할 때 캐릭터가 반응하려면 손쉬운 사용 권한이 필요합니다. 입력한 글자는 저장하지 않습니다.</p>
+        <ol class="permission-steps">
+          <li><strong>Codex Pet</strong>을 켭니다. 목록에 없으면 <strong>+</strong>로 앱을 추가하세요.</li>
+          <li>메모 앱에서 타이핑해 캐릭터가 반응하는지 확인합니다.</li>
+        </ol>
+        <button class="primary-button" type="button" data-guide-open-settings>손쉬운 사용 설정 열기</button>
+      </div>
       <p class="page-feedback" data-guide-feedback role="status" aria-live="polite"></p>
     </div>
   `;
@@ -143,10 +132,12 @@ export function mountManagerPages(root: HTMLElement): void {
   historyPage.setAttribute("aria-labelledby", "history-heading");
   historyPage.innerHTML = `
     <div class="page-content">
-      <p class="eyebrow">업데이트 기록</p>
       <h2 id="history-heading" tabindex="-1">버전 히스토리</h2>
-      <p class="page-intro">현재 앱 <strong>${formatVersionTag(appMetadata.version)}</strong> · GitHub에 게시된 최근 100개 릴리스의 변경 내용을 확인하세요.</p>
-      <div class="page-actions"><button type="button" data-refresh-history>새로고침</button></div>
+      <div data-update-slot></div>
+      <div class="history-heading">
+        <h3>변경 내역</h3>
+        <button type="button" data-refresh-history>새로고침</button>
+      </div>
       <p class="page-feedback" data-history-feedback role="status" aria-live="polite"></p>
       <div class="release-history" data-release-history></div>
     </div>
@@ -188,9 +179,7 @@ export function mountManagerPages(root: HTMLElement): void {
       );
       historyLoaded = true;
       historyFeedback.textContent =
-        result.releases.length === 0
-          ? "아직 게시된 릴리스가 없습니다."
-          : `${result.releases.length}개 릴리스 · 최신 게시순`;
+        result.releases.length === 0 ? "아직 게시된 릴리스가 없습니다." : "";
     } catch {
       historyFeedback.textContent =
         "버전 히스토리를 불러오지 못했습니다. 새로고침으로 다시 시도하세요.";
@@ -215,7 +204,7 @@ export function mountManagerPages(root: HTMLElement): void {
     if (focus) {
       const heading =
         page === "pets"
-          ? petsPage
+          ? query<HTMLElement>(petsPage, "[data-preview-name]")
           : query<HTMLElement>(
               page === "permissions"
                 ? permissionsPage
@@ -251,7 +240,7 @@ export function mountManagerPages(root: HTMLElement): void {
   settingsButton.addEventListener("click", () => {
     void guideAction(settingsButton, () => api.openAccessibilitySettings());
   });
-  mountAppUpdate(navigation, query<HTMLElement>(historyPage, ".page-content"), () =>
+  mountAppUpdate(navigation, query<HTMLElement>(historyPage, "[data-update-slot]"), () =>
     showPage("history"),
   );
   const initialPage = new URLSearchParams(window.location.search).get("page");
@@ -271,10 +260,16 @@ function createReleaseCard(release: ReleaseHistoryEntry): HTMLElement {
   const metadata = document.createElement("p");
   metadata.className = "release-meta";
   const current = release.version.replace(/^v/, "") === appMetadata.version;
-  metadata.textContent = `${release.version} · ${new Date(release.publishedAt).toLocaleDateString("ko-KR")}${current ? " · 현재 앱 버전" : ""}${release.prerelease ? " · 사전 릴리스" : ""}`;
+  const version = release.title === release.version ? "" : `${release.version} · `;
+  metadata.textContent = `${version}${new Date(release.publishedAt).toLocaleDateString("ko-KR")}${current ? " · 현재 앱 버전" : ""}${release.prerelease ? " · 사전 릴리스" : ""}`;
   const notes = document.createElement("p");
   notes.className = "release-notes";
-  notes.textContent = release.notes.trim() || "등록된 변경 내용이 없습니다.";
+  notes.textContent =
+    release.notes
+      .trim()
+      .replace(/^#{1,6}[ \t]+/gm, "")
+      .replace(/^[ \t]*[-*][ \t]+/gm, "• ")
+      .replace(/\*\*([^*\n]+)\*\*/g, "$1") || "등록된 변경 내용이 없습니다.";
   card.append(heading, metadata, notes);
   return card;
 }
