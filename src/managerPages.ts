@@ -1,5 +1,5 @@
 import { BookOpen, History, PawPrint, Terminal, createElement } from "lucide";
-import currentReleaseNotes from "../docs/releases/v0.0.5.md?raw";
+import currentReleaseNotes from "../docs/releases/v0.0.6.md?raw";
 import { appMetadata, formatVersionTag } from "../electron/shared/release.js";
 import type { ReleaseHistoryEntry } from "../electron/shared/releaseHistory.js";
 import { mountAgentSessionsPage } from "./agentSessionsView.js";
