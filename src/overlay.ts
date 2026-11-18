@@ -1,5 +1,9 @@
 import { MoveDiagonal2, createElement } from "lucide";
-import type { AgentSession } from "../electron/shared/agentSessions.js";
+import {
+  type AgentSession,
+  agentProviderLabels,
+  agentStatusLabels,
+} from "../electron/shared/agentSessions.js";
 import type { AutoWalkDirection, PetManagerState } from "../electron/shared/ipc.js";
 import {
   type KeyboardAnimationActivity,
@@ -33,6 +37,10 @@ type OverlayRefs = {
   readonly sprite: HTMLElement;
   readonly outgoingSprite: HTMLElement;
   readonly grip: HTMLButtonElement;
+  readonly session: HTMLButtonElement;
+  readonly sessionProvider: HTMLElement;
+  readonly sessionStatus: HTMLElement;
+  readonly sessionTask: HTMLElement;
 };
 
 type DragSession = {
@@ -298,7 +306,7 @@ function bindHover(refs: OverlayRefs, runtime: AnimationRuntime): void {
       Math.PI;
   });
   refs.shell.addEventListener("dblclick", (event) => {
-    if (event.target instanceof Element && event.target.closest("[data-resize-grip]")) return;
+    if (event.target instanceof Element && event.target.closest("button")) return;
     requestAnimation(refs, runtime, "jumping");
   });
   refs.shell.addEventListener("pointerleave", () => {
@@ -328,7 +336,7 @@ function bindDrag(refs: OverlayRefs, runtime: AnimationRuntime): void {
       return;
     }
 
-    if (event.target instanceof Element && event.target.closest("[data-resize-grip]") !== null) {
+    if (event.target instanceof Element && event.target.closest("button") !== null) {
       return;
     }
 
@@ -402,8 +410,17 @@ export function renderOverlay(root: HTMLElement): void {
   document.documentElement.classList.add("overlay-mode");
   root.innerHTML = `
     <main class="overlay-shell" data-dragging="false">
-      <div data-overlay-sprite class="sprite-frame overlay-sprite" role="img"></div>
-      <div data-outgoing-sprite class="sprite-frame overlay-sprite outgoing-sprite" aria-hidden="true"></div>
+      <button data-overlay-session class="overlay-session" type="button" hidden>
+        <span class="overlay-session-meta">
+          <span data-session-provider></span>
+          <span data-session-status></span>
+        </span>
+        <span data-session-task class="overlay-session-task"></span>
+      </button>
+      <div class="overlay-artboard">
+        <div data-overlay-sprite class="sprite-frame overlay-sprite" role="img"></div>
+        <div data-outgoing-sprite class="sprite-frame overlay-sprite outgoing-sprite" aria-hidden="true"></div>
+      </div>
       <button data-resize-grip class="resize-grip" type="button" aria-label="Resize"></button>
     </main>
   `;
@@ -413,6 +430,10 @@ export function renderOverlay(root: HTMLElement): void {
     sprite: query(root, "[data-overlay-sprite]"),
     outgoingSprite: query(root, "[data-outgoing-sprite]"),
     grip: query(root, "[data-resize-grip]"),
+    session: query(root, "[data-overlay-session]"),
+    sessionProvider: query(root, "[data-session-provider]"),
+    sessionStatus: query(root, "[data-session-status]"),
+    sessionTask: query(root, "[data-session-task]"),
   };
   const runtime: AnimationRuntime = {
     autoWalk: false,
@@ -444,14 +465,41 @@ export function renderOverlay(root: HTMLElement): void {
   bindResizeGrip(refs);
   paint(refs, runtime);
 
+  refs.session.addEventListener("click", () => {
+    void api.openAgentSessions().catch(console.error);
+  });
+
   let lastSession: AgentSession | undefined;
+  let summaryTimer: ReturnType<typeof setTimeout> | undefined;
   const renderSessions = (sessions: readonly AgentSession[], animate: boolean): void => {
-    runtime.agentState = sessions.some((session) => session.status === "waiting")
-      ? "review"
-      : sessions.some((session) => session.status === "working")
-        ? "running"
-        : null;
     const latest = sessions[0];
+    const active =
+      sessions.find((session) => session.status === "waiting") ??
+      sessions.find((session) => session.status === "working");
+    runtime.agentState = active?.status === "waiting" ? "review" : active ? "running" : null;
+    const recent = sessions.find(
+      (session) => session.status === "completed" || session.status === "failed",
+    );
+    const remaining = recent ? recent.updatedAt + 12_000 - Date.now() : 0;
+    const summary = active ?? (remaining > 0 ? recent : undefined);
+    clearTimeout(summaryTimer);
+    refs.session.hidden = summary === undefined;
+    if (summary) {
+      const task = summary.task || summary.tool || "작업 내용 수신 대기";
+      refs.session.setAttribute("data-status", summary.status);
+      refs.sessionProvider.textContent = agentProviderLabels[summary.provider];
+      refs.sessionStatus.textContent = agentStatusLabels[summary.status];
+      refs.sessionTask.textContent = task;
+      refs.session.title = summary.project ? `${summary.project} · ${task}` : task;
+      refs.session.setAttribute(
+        "aria-label",
+        `작업 세션 열기 · ${agentProviderLabels[summary.provider]} · ${agentStatusLabels[summary.status]} · ${task}`,
+      );
+      if (!active)
+        summaryTimer = setTimeout(() => {
+          refs.session.hidden = true;
+        }, remaining);
+    }
     if (
       animate &&
       latest &&

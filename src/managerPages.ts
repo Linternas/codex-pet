@@ -1,5 +1,5 @@
 import { BookOpen, History, PawPrint, Terminal, createElement } from "lucide";
-import currentReleaseNotes from "../docs/releases/v0.0.7.md?raw";
+import currentReleaseNotes from "../docs/releases/v0.0.8.md?raw";
 import { appMetadata, formatVersionTag } from "../electron/shared/release.js";
 import type { ReleaseHistoryEntry } from "../electron/shared/releaseHistory.js";
 import { mountAgentSessionsPage } from "./agentSessionsView.js";
@@ -254,7 +254,13 @@ export function mountManagerPages(root: HTMLElement): void {
   mountAppUpdate(navigation, query<HTMLElement>(historyPage, ".page-content"), () =>
     showPage("history"),
   );
-  showPage(hasSeenGuide() ? "pets" : "permissions", false);
+  const initialPage = new URLSearchParams(window.location.search).get("page");
+  showPage(
+    initialPage === "sessions" ? "sessions" : hasSeenGuide() ? "pets" : "permissions",
+    false,
+  );
+  const stop = api.onShowAgentSessions(() => showPage("sessions"));
+  window.addEventListener("pagehide", stop, { once: true });
 }
 
 function createReleaseCard(release: ReleaseHistoryEntry): HTMLElement {

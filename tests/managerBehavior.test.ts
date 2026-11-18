@@ -83,6 +83,8 @@ beforeEach(() => {
       return { kind: "ready", state };
     }),
     stepAutoWalk: vi.fn(async () => false),
+    onShowAgentSessions: vi.fn(() => () => undefined),
+    openAgentSessions: vi.fn(async () => undefined),
     getAgentSessions: vi.fn(async () => []),
     onAgentSessions: vi.fn(() => () => undefined),
     configureAgentHooks: vi.fn(async () => undefined),

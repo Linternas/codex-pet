@@ -1,6 +1,12 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("codexPet", {
+  openAgentSessions: () => ipcRenderer.invoke("session:open"),
+  onShowAgentSessions: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("session:show-page", listener);
+    return () => ipcRenderer.removeListener("session:show-page", listener);
+  },
   getAgentSessions: () => ipcRenderer.invoke("session:get"),
   configureAgentHooks: (provider, enabled) =>
     ipcRenderer.invoke("session:configure", { provider, enabled }),

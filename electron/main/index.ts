@@ -144,9 +144,17 @@ function toErrorResult(error: unknown, state?: PetManagerState): PetManagerResul
   return { kind: "error", message: "Unknown error", state };
 }
 
-async function createWindow(): Promise<void> {
+async function createWindow(page?: "sessions"): Promise<void> {
   if (mainWindow !== undefined) {
     focusMainWindow();
+    if (page === "sessions") {
+      const { webContents } = mainWindow;
+      const showSessions = () => {
+        if (!webContents.isDestroyed()) webContents.send(agentSessionChannels.showPage);
+      };
+      if (webContents.isLoadingMainFrame()) webContents.once("did-finish-load", showSessions);
+      else showSessions();
+    }
     return;
   }
 
@@ -188,7 +196,10 @@ async function createWindow(): Promise<void> {
     mainWindow = undefined;
   });
 
-  await mainWindow.loadURL(resolveRendererUrl(projectRoot, devServerUrl));
+  const url = new URL(resolveRendererUrl(projectRoot, devServerUrl));
+  if (page) url.searchParams.set("page", page);
+  await mainWindow.loadURL(url.toString());
+  if (page) focusMainWindow();
 }
 
 function focusMainWindow(): void {
@@ -429,6 +440,7 @@ async function startApp(): Promise<void> {
     console.error("Codex Pet session receiver unavailable", error);
   }
   ipcMain.handle(agentSessionChannels.get, () => agentSessions);
+  ipcMain.handle(agentSessionChannels.open, () => createWindow("sessions"));
   ipcMain.handle(agentSessionChannels.configure, async (event, payload: unknown) => {
     if (event.sender !== mainWindow?.webContents)
       throw new Error("Invalid session settings sender");

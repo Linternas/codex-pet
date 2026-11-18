@@ -40,6 +40,8 @@ export function getPetApi(): PetApi {
   }
 
   return {
+    openAgentSessions: async () => undefined,
+    onShowAgentSessions: () => () => undefined,
     getAgentSessions: async () => [],
     configureAgentHooks: async () => {
       throw new Error("macOS 앱에서 세션을 연결하세요.");

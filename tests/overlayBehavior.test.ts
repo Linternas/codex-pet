@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentSession } from "../electron/shared/agentSessions.js";
 import type { PetManagerState } from "../electron/shared/ipc.js";
 import type { PetAnimationState } from "../electron/shared/petAnimation.js";
 
@@ -12,8 +13,10 @@ let animation: (state: PetAnimationState) => void;
 let tick: FrameRequestCallback;
 let now: number;
 let publishState: (state: PetManagerState) => void;
+let publishSessions: (sessions: readonly AgentSession[]) => void;
 let overlayState: PetManagerState;
 const stepAutoWalk = vi.fn(async () => true);
+const openAgentSessions = vi.fn(async () => undefined);
 function advance(milliseconds: number) {
   now += milliseconds;
   tick(now);
@@ -61,7 +64,10 @@ beforeEach(async () => {
       },
       getState: async () => ({ kind: "ready", state: overlayState }),
       getAgentSessions: async () => [],
-      onAgentSessions: () => undefined,
+      onAgentSessions: (callback: typeof publishSessions) => {
+        publishSessions = callback;
+      },
+      openAgentSessions,
       stepAutoWalk,
     },
   });
@@ -147,6 +153,47 @@ describe("sprite transitions", () => {
     expect(sprite.style.backgroundImage).toContain("second.webp");
     expect(outgoing.style.backgroundImage).toContain("test.webp");
     expect(animate).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("desktop session card", () => {
+  it("shows the task waiting for input, opens its list, and hides after completion", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const summary = document.querySelector<HTMLButtonElement>("[data-overlay-session]");
+      if (!summary) throw new Error("Missing desktop session card");
+      const codex: AgentSession = {
+        provider: "codex",
+        sessionId: "codex-1",
+        project: "repo",
+        task: "코드 수정 중",
+        tool: "",
+        status: "working",
+        updatedAt: now,
+      };
+      const claude: AgentSession = {
+        ...codex,
+        provider: "claude",
+        sessionId: "claude-2",
+        task: "확인 대기 중",
+        status: "waiting",
+      };
+      expect(summary.hidden).toBe(true);
+      publishSessions([codex, claude]);
+      expect(summary.hidden).toBe(false);
+      expect(summary.textContent).toContain("Claude Code");
+      expect(summary.textContent).toContain("확인 대기 중");
+      expect(state()).toBe("review");
+      summary.click();
+      expect(openAgentSessions).toHaveBeenCalledOnce();
+
+      publishSessions([{ ...claude, status: "completed" }]);
+      expect(summary.textContent).toContain("응답 완료");
+      vi.advanceTimersByTime(12_000);
+      expect(summary.hidden).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

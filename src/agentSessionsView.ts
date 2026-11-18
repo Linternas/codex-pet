@@ -1,15 +1,10 @@
-import { type AgentSession, agentProviderSchema } from "../electron/shared/agentSessions.js";
+import {
+  type AgentSession,
+  agentProviderLabels,
+  agentProviderSchema,
+  agentStatusLabels,
+} from "../electron/shared/agentSessions.js";
 import { query } from "./managerView.js";
-
-const providers = { codex: "Codex", claude: "Claude Code" } as const;
-const statuses: Record<AgentSession["status"], string> = {
-  idle: "대기",
-  working: "작업 중",
-  waiting: "입력·승인 대기",
-  completed: "응답 완료",
-  failed: "오류",
-  ended: "세션 종료",
-};
 
 export function mountAgentSessionsPage(api: NonNullable<Window["codexPet"]>): HTMLElement {
   const page = document.createElement("section");
@@ -49,7 +44,7 @@ export function mountAgentSessionsPage(api: NonNullable<Window["codexPet"]>): HT
           ? provider === "codex"
             ? "Codex의 새 세션에서 /hooks로 추가된 훅을 신뢰한 뒤 사용하세요."
             : "Claude Code의 새 세션에서 훅이 적용됩니다."
-          : `${providers[provider]} 연결을 해제했습니다. 열려 있는 세션을 다시 시작하면 훅 설정이 갱신됩니다.`;
+          : `${agentProviderLabels[provider]} 연결을 해제했습니다. 열려 있는 세션을 다시 시작하면 훅 설정이 갱신됩니다.`;
       } catch (error) {
         feedback.textContent =
           error instanceof Error ? error.message : "훅 설정을 변경하지 못했습니다.";
@@ -66,7 +61,7 @@ export function mountAgentSessionsPage(api: NonNullable<Window["codexPet"]>): HT
         const card = document.createElement("article");
         card.className = "release-card session-card";
         const title = document.createElement("h3");
-        title.textContent = `${providers[session.provider]}${session.project ? ` · ${session.project}` : ""} · ${statuses[session.status]}`;
+        title.textContent = `${agentProviderLabels[session.provider]}${session.project ? ` · ${session.project}` : ""} · ${agentStatusLabels[session.status]}`;
         const task = document.createElement("p");
         task.textContent = session.task || "수신한 프롬프트 없음";
         const detail = document.createElement("p");

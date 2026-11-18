@@ -33,8 +33,20 @@ export type AgentSession = {
   readonly updatedAt: number;
 };
 
+export const agentProviderLabels = { codex: "Codex", claude: "Claude Code" } as const;
+export const agentStatusLabels: Record<AgentSession["status"], string> = {
+  idle: "대기",
+  working: "작업 중",
+  waiting: "입력·승인 대기",
+  completed: "응답 완료",
+  failed: "오류",
+  ended: "세션 종료",
+};
+
 export const agentSessionChannels = {
   get: "session:get",
+  open: "session:open",
+  showPage: "session:show-page",
   changed: "session:changed",
   configure: "session:configure",
 } as const;

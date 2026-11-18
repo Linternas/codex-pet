@@ -13,6 +13,8 @@ import type { UpdateCheckResult } from "../electron/shared/update.js";
 declare global {
   interface Window {
     readonly codexPet?: {
+      readonly openAgentSessions: () => Promise<void>;
+      readonly onShowAgentSessions: (callback: () => void) => () => void;
       readonly getAgentSessions: () => Promise<readonly AgentSession[]>;
       readonly configureAgentHooks: (provider: AgentProvider, enabled: boolean) => Promise<void>;
       readonly onAgentSessions: (
