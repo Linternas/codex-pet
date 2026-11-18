@@ -157,7 +157,7 @@ export function mountManagerPages(root: HTMLElement): void {
     version: formatVersionTag(appMetadata.version),
     title: formatVersionTag(appMetadata.version),
     notes: currentReleaseNotes,
-    publishedAt: "2026-09-09T00:00:00Z",
+    publishedAt: "2026-11-18T00:00:00Z",
     prerelease: false,
   };
   historyList.append(createReleaseCard(currentRelease));
