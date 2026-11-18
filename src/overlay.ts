@@ -18,6 +18,7 @@ import {
   resolveSpriteGrid,
   resolveSpritePosition,
 } from "../electron/shared/petAnimation.js";
+import type { PetView } from "../electron/shared/petAssets.js";
 import {
   type VisibleFrameColumns,
   createFallbackVisibleFrameColumns,
@@ -30,6 +31,7 @@ const api = getPetApi();
 type OverlayRefs = {
   readonly shell: HTMLElement;
   readonly sprite: HTMLElement;
+  readonly outgoingSprite: HTMLElement;
   readonly grip: HTMLButtonElement;
 };
 
@@ -57,6 +59,8 @@ type AnimationRuntime = {
   requestedUntil: number;
   state: PetAnimationState;
   spriteUrl: string | null;
+  requestedSpriteUrl: string | null;
+  transition: Animation | undefined;
   visibleFrameColumns: VisibleFrameColumns;
 };
 
@@ -87,7 +91,30 @@ function resolveRuntimeState(runtime: AnimationRuntime, now: number): PetAnimati
   return runtime.walkState ?? resolveRestAnimation(runtime.lastActivityAt, now);
 }
 
-function paint(refs: OverlayRefs, runtime: AnimationRuntime, now = Date.now()): void {
+function transitionFromCurrentFrame(refs: OverlayRefs, runtime: AnimationRuntime): void {
+  runtime.transition?.cancel();
+  if (
+    !refs.sprite.style.backgroundImage ||
+    !refs.outgoingSprite.animate ||
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+  )
+    return;
+
+  refs.outgoingSprite.style.backgroundImage = refs.sprite.style.backgroundImage;
+  refs.outgoingSprite.style.backgroundSize = refs.sprite.style.backgroundSize;
+  refs.outgoingSprite.style.backgroundPosition = refs.sprite.style.backgroundPosition;
+  runtime.transition = refs.outgoingSprite.animate([{ opacity: 1 }, { opacity: 0 }], {
+    duration: 140,
+    easing: "ease-out",
+  });
+}
+
+function paint(
+  refs: OverlayRefs,
+  runtime: AnimationRuntime,
+  now = Date.now(),
+  nextPet?: PetView,
+): void {
   const nextState = resolveRuntimeState(runtime, now);
   if (nextState !== runtime.state) {
     runtime.state = nextState;
@@ -108,8 +135,17 @@ function paint(refs: OverlayRefs, runtime: AnimationRuntime, now = Date.now()): 
   const position = looking
     ? resolveLookPosition(runtime.lookDirection)
     : resolveSpritePosition(runtime.state, actualColumn, runtime.version);
+  const displayedState = looking ? "looking" : runtime.state;
+  if (nextPet || refs.sprite.getAttribute("data-animation-state") !== displayedState) {
+    transitionFromCurrentFrame(refs, runtime);
+    refs.sprite.setAttribute("data-animation-state", displayedState);
+  }
+  if (nextPet) {
+    refs.sprite.style.backgroundSize = `800% ${resolveSpriteGrid(runtime.version).rows * 100}%`;
+    refs.sprite.style.backgroundImage = `url("${nextPet.spriteUrl}")`;
+    refs.sprite.setAttribute("aria-label", nextPet.manifest.displayName);
+  }
   refs.sprite.style.backgroundPosition = `${position.x} ${position.y}`;
-  refs.sprite.setAttribute("data-animation-state", looking ? "looking" : runtime.state);
 }
 
 function renderState(refs: OverlayRefs, runtime: AnimationRuntime, state: PetManagerState): void {
@@ -119,6 +155,8 @@ function renderState(refs: OverlayRefs, runtime: AnimationRuntime, state: PetMan
   if (!runtime.autoWalk) runtime.walkState = null;
   const pet = state.pets.find((candidate) => candidate.manifest.id === state.appliedPetId);
   if (pet === undefined) {
+    runtime.requestedSpriteUrl = null;
+    runtime.transition?.cancel();
     refs.sprite.style.backgroundImage = "";
     runtime.spriteUrl = null;
     runtime.visibleFrameColumns = createFallbackVisibleFrameColumns();
@@ -126,26 +164,21 @@ function renderState(refs: OverlayRefs, runtime: AnimationRuntime, state: PetMan
     return;
   }
 
-  runtime.version = pet.manifest.spriteVersionNumber ?? 1;
-  refs.sprite.style.backgroundSize = `800% ${resolveSpriteGrid(runtime.version).rows * 100}%`;
-  refs.sprite.style.backgroundImage = `url("${pet.spriteUrl}")`;
-  refs.sprite.setAttribute("aria-label", pet.manifest.displayName);
-  if (runtime.spriteUrl === pet.spriteUrl) {
-    return;
-  }
-
-  runtime.spriteUrl = pet.spriteUrl;
-  runtime.keyboard = { lastKeyAt: null, greetingUntil: 0 };
-  runtime.visibleFrameColumns = createFallbackVisibleFrameColumns(runtime.version);
-  runtime.lastActivityAt = Date.now();
-  void detectVisibleFrameColumns(pet.spriteUrl, runtime.version).then((visibleFrameColumns) => {
-    if (runtime.spriteUrl !== pet.spriteUrl) {
-      return;
-    }
-
+  if (runtime.requestedSpriteUrl === pet.spriteUrl) return;
+  runtime.requestedSpriteUrl = pet.spriteUrl;
+  if (runtime.spriteUrl === pet.spriteUrl) return;
+  const version = pet.manifest.spriteVersionNumber ?? 1;
+  void detectVisibleFrameColumns(pet.spriteUrl, version).then((visibleFrameColumns) => {
+    if (runtime.requestedSpriteUrl !== pet.spriteUrl || runtime.spriteUrl === pet.spriteUrl) return;
+    const now = Date.now();
+    runtime.spriteUrl = pet.spriteUrl;
+    runtime.version = version;
+    runtime.keyboard = { lastKeyAt: null, greetingUntil: 0 };
     runtime.visibleFrameColumns = visibleFrameColumns;
     runtime.column = 0;
-    paint(refs, runtime);
+    runtime.lastFrameAt = now;
+    runtime.lastActivityAt = now;
+    paint(refs, runtime, now, pet);
   });
 }
 
@@ -370,6 +403,7 @@ export function renderOverlay(root: HTMLElement): void {
   root.innerHTML = `
     <main class="overlay-shell" data-dragging="false">
       <div data-overlay-sprite class="sprite-frame overlay-sprite" role="img"></div>
+      <div data-outgoing-sprite class="sprite-frame overlay-sprite outgoing-sprite" aria-hidden="true"></div>
       <button data-resize-grip class="resize-grip" type="button" aria-label="Resize"></button>
     </main>
   `;
@@ -377,6 +411,7 @@ export function renderOverlay(root: HTMLElement): void {
   const refs: OverlayRefs = {
     shell: query(root, ".overlay-shell"),
     sprite: query(root, "[data-overlay-sprite]"),
+    outgoingSprite: query(root, "[data-outgoing-sprite]"),
     grip: query(root, "[data-resize-grip]"),
   };
   const runtime: AnimationRuntime = {
@@ -397,6 +432,8 @@ export function renderOverlay(root: HTMLElement): void {
     requestedUntil: 0,
     state: defaultAnimationState,
     spriteUrl: null,
+    requestedSpriteUrl: null,
+    transition: undefined,
     visibleFrameColumns: createFallbackVisibleFrameColumns(),
   };
 

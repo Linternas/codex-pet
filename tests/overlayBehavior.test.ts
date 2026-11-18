@@ -120,6 +120,36 @@ describe("keyboard-driven overlay", () => {
   });
 });
 
+describe("sprite transitions", () => {
+  it("fades the previous pose on state or character changes while sprite frames advance normally", async () => {
+    const sprite = document.querySelector<HTMLElement>("[data-overlay-sprite]");
+    const outgoing = document.querySelector<HTMLElement>("[data-outgoing-sprite]");
+    if (!sprite || !outgoing) throw new Error("Missing transition layers");
+    const animate = vi.fn(() => ({ cancel: vi.fn() }));
+    Object.defineProperty(outgoing, "animate", { value: animate });
+
+    const firstPosition = sprite.style.backgroundPosition;
+    key();
+    expect(animate).toHaveBeenCalledTimes(1);
+    expect(outgoing.style.backgroundPosition).toBe(firstPosition);
+    advance(900);
+    expect(animate).toHaveBeenCalledTimes(1);
+    expect(sprite.style.backgroundPosition).not.toBe(firstPosition);
+
+    const original = overlayState.pets[0];
+    if (!original) throw new Error("Missing test sprite");
+    publishState({
+      ...overlayState,
+      pets: [{ ...original, spriteUrl: "second.webp" }],
+    });
+    expect(sprite.style.backgroundImage).toContain("test.webp");
+    await Promise.resolve();
+    expect(sprite.style.backgroundImage).toContain("second.webp");
+    expect(outgoing.style.backgroundImage).toContain("test.webp");
+    expect(animate).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("auto walk", () => {
   async function advanceWalk(ms: number) {
     advance(ms);
